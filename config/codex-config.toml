@@ -1,0 +1,19 @@
+# Default Codex config seeded into ~/.codex/config.toml on first start.
+#
+# Schema reference:
+#   https://github.com/openai/codex/blob/main/codex-rs/config/src/config_toml.rs
+#   https://github.com/openai/codex/blob/main/codex-rs/config/src/mcp_types.rs
+#
+# Notes on the keys below (verified against the structs above, not the
+# example in the implementation plan):
+#   - sandbox_mode is a top-level key, not a [sandbox] table.
+#   - approval_policy is a top-level key with kebab-case values.
+#   - mcp_servers is a HashMap<String, McpServerConfig>, so each server
+#     is registered as `[mcp_servers.NAME]`, NOT `[[mcp_servers]]`.
+
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest"]

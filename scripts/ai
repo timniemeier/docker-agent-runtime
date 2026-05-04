@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# `ai` — unified launcher for Claude Code and Codex CLI inside the runtime.
+set -euo pipefail
+IFS=$'\n\t'
+
+RED=$'\033[31m'
+BOLD=$'\033[1m'
+RESET=$'\033[0m'
+
+warn_yolo() {
+    local agent=$1
+    {
+        printf '%s%s' "$RED" "$BOLD"
+        printf '!!  YOLO mode: %s with all permission prompts disabled.\n' "$agent"
+        printf '!!  The agent can run any command and modify any file in the workspace.\n'
+        printf '!!  Make sure your network firewall and tenant isolation are intact.\n'
+        printf '%s' "$RESET"
+    } >&2
+}
+
+usage() {
+    cat <<'EOF'
+Usage: ai <command> [args...]
+
+Commands:
+  claude [args...]            Launch Claude Code with default permission prompts.
+  claude --yolo [args...]     Launch Claude with --dangerously-skip-permissions.
+  codex [args...]             Launch Codex with workspace-write sandbox + on-request approval.
+  codex --yolo [args...]      Launch Codex with danger-full-access sandbox + never approval.
+  both                        Open a tmux split: Claude on the left, Codex on the right.
+  firewall                    Re-run the egress firewall (sudo).
+  help                        Show this help.
+EOF
+}
+
+run_claude() {
+    if [[ "${1:-}" == "--yolo" ]]; then
+        shift
+        warn_yolo "Claude Code"
+        exec claude --dangerously-skip-permissions "$@"
+    fi
+    exec claude "$@"
+}
+
+run_codex() {
+    if [[ "${1:-}" == "--yolo" ]]; then
+        shift
+        warn_yolo "Codex"
+        exec codex --sandbox danger-full-access --ask-for-approval never "$@"
+    fi
+    exec codex --sandbox workspace-write --ask-for-approval on-request "$@"
+}
+
+run_both() {
+    if ! command -v tmux >/dev/null 2>&1; then
+        echo "tmux is not installed — cannot run split mode." >&2
+        exit 1
+    fi
+    local session="ai-both-$$"
+    tmux new-session -d -s "$session" -n agents "ai claude"
+    tmux split-window -h -t "$session:agents" "ai codex"
+    tmux select-pane -t "$session:agents.0"
+    exec tmux attach -t "$session"
+}
+
+run_firewall() {
+    exec sudo /usr/local/bin/init-firewall.sh
+}
+
+case "${1:-help}" in
+    claude)
+        shift
+        run_claude "$@"
+        ;;
+    codex)
+        shift
+        run_codex "$@"
+        ;;
+    both)
+        run_both
+        ;;
+    firewall)
+        run_firewall
+        ;;
+    help|-h|--help)
+        usage
+        ;;
+    *)
+        echo "Unknown command: ${1}" >&2
+        usage
+        exit 2
+        ;;
+esac

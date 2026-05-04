@@ -1,0 +1,74 @@
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agent-runtime:latest
+    init: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_ADMIN
+      - SYS_CHROOT
+      - SETUID
+      - SETGID
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+    mem_limit: 8g
+    pids_limit: 4096
+    cpus: 4.0
+    working_dir: /workspace
+    volumes:
+      - ${PWD}:/workspace
+      - agent-claude:/home/node/.claude
+      - agent-codex:/home/node/.codex
+      - agent-gh:/home/node/.config/gh
+      - agent-history:/commandhistory
+      - agent-npm:/home/node/.npm
+      - agent-composer:/home/node/.composer
+      - agent-pip:/home/node/.cache/pip
+      - agent-playwright:/home/node/.cache/ms-playwright
+    environment:
+      - ANTHROPIC_API_KEY
+      - OPENAI_API_KEY
+      - TZ=Europe/Berlin
+      - CLAUDE_CONFIG_DIR=/home/node/.claude
+      - CODEX_HOME=/home/node/.codex
+    networks:
+      - agent-net
+    command: sleep infinity
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["laravel"]
+    environment:
+      POSTGRES_USER: laravel
+      POSTGRES_PASSWORD: laravel
+      POSTGRES_DB: laravel
+    volumes:
+      - agent-postgres:/var/lib/postgresql/data
+    networks:
+      - agent-net
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["laravel"]
+    networks:
+      - agent-net
+
+networks:
+  agent-net:
+    driver: bridge
+
+volumes:
+  agent-claude:
+  agent-codex:
+  agent-gh:
+  agent-history:
+  agent-npm:
+  agent-composer:
+  agent-pip:
+  agent-playwright:
+  agent-postgres:

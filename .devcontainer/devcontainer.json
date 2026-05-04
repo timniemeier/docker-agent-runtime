@@ -1,0 +1,50 @@
+{
+  "name": "Agent Runtime",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": ".."
+  },
+  "runArgs": [
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW",
+    "--cap-add=SYS_ADMIN",
+    "--cap-add=SYS_CHROOT",
+    "--cap-add=SETUID",
+    "--cap-add=SETGID",
+    "--cap-add=SYS_PTRACE",
+    "--security-opt=seccomp=unconfined",
+    "--security-opt=apparmor=unconfined",
+    "--memory=8g",
+    "--pids-limit=4096",
+    "--cpus=4"
+  ],
+  "init": true,
+  "remoteUser": "node",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "source=agent-claude-${devcontainerId},target=/home/node/.claude,type=volume",
+    "source=agent-codex-${devcontainerId},target=/home/node/.codex,type=volume",
+    "source=agent-gh-${devcontainerId},target=/home/node/.config/gh,type=volume",
+    "source=agent-history-${devcontainerId},target=/commandhistory,type=volume",
+    "source=agent-npm-${devcontainerId},target=/home/node/.npm,type=volume",
+    "source=agent-composer-${devcontainerId},target=/home/node/.composer,type=volume",
+    "source=agent-pip-${devcontainerId},target=/home/node/.cache/pip,type=volume",
+    "source=agent-playwright-${devcontainerId},target=/home/node/.cache/ms-playwright,type=volume",
+    "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly"
+  ],
+  "containerEnv": {
+    "NODE_OPTIONS": "--max-old-space-size=4096",
+    "CLAUDE_CONFIG_DIR": "/home/node/.claude",
+    "CODEX_HOME": "/home/node/.codex",
+    "TZ": "Europe/Berlin"
+  },
+  "remoteEnv": {
+    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}",
+    "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}",
+    "SSH_AUTH_SOCK": "/ssh-agent"
+  },
+  "postCreateCommand": "/usr/local/bin/post-create.sh",
+  "postStartCommand": "/usr/local/bin/post-start.sh",
+  "waitFor": "postStartCommand"
+}
