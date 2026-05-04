@@ -184,21 +184,36 @@ ENV SHELL=/bin/zsh
 ENV EDITOR=nano
 ENV DEVCONTAINER=true
 
-# Persistent shell history lives on a named volume so it survives rebuilds.
+# oh-my-zsh + powerlevel10k via zsh-in-docker. We pin the script's SHA-256 and
+# verify before piping to sh — same threat model as the git-delta install.
+ARG ZSH_IN_DOCKER_VERSION=1.2.0
+ARG ZSH_IN_DOCKER_SHA256=f74e5b08c295b6c3886654bb63c688e5ea16c58a4209435c4ddbab2c42fe9b41
+RUN curl -fsSL -o /tmp/zsh-in-docker.sh \
+        "https://github.com/deluan/zsh-in-docker/releases/download/v${ZSH_IN_DOCKER_VERSION}/zsh-in-docker.sh" && \
+    echo "${ZSH_IN_DOCKER_SHA256}  /tmp/zsh-in-docker.sh" | sha256sum -c - && \
+    sh /tmp/zsh-in-docker.sh \
+        -p git \
+        -p fzf \
+        -p https://github.com/zsh-users/zsh-autosuggestions \
+        -p https://github.com/zsh-users/zsh-syntax-highlighting \
+        -a 'source /usr/share/doc/fzf/examples/key-bindings.zsh' \
+        -a 'source /usr/share/doc/fzf/examples/completion.zsh' \
+        -a 'export HISTFILE=/commandhistory/.zsh_history' \
+        -a 'export HISTSIZE=10000' \
+        -a 'export SAVEHIST=10000' \
+        -a 'setopt INC_APPEND_HISTORY SHARE_HISTORY' \
+        -a 'eval "$(direnv hook zsh)"' \
+        -a 'export PATH=/usr/local/share/npm-global/bin:$HOME/.composer/vendor/bin:$HOME/.local/bin:$PATH' \
+        -x && \
+    rm /tmp/zsh-in-docker.sh
+
+# Persistent bash history (zsh history is wired into .zshrc above by -a flags).
 RUN { \
         echo 'export HISTFILE=/commandhistory/.bash_history'; \
         echo 'export HISTSIZE=10000'; \
         echo 'export HISTFILESIZE=20000'; \
         echo 'export PROMPT_COMMAND="history -a; ${PROMPT_COMMAND:-}"'; \
-    } >> /home/${USERNAME}/.bashrc \
-    && { \
-        echo 'export HISTFILE=/commandhistory/.zsh_history'; \
-        echo 'export HISTSIZE=10000'; \
-        echo 'export SAVEHIST=10000'; \
-        echo 'setopt INC_APPEND_HISTORY SHARE_HISTORY'; \
-        echo 'eval "$(direnv hook zsh)"'; \
-        echo 'export PATH=/usr/local/share/npm-global/bin:$HOME/.composer/vendor/bin:$HOME/.local/bin:$PATH'; \
-    } >> /home/${USERNAME}/.zshrc
+    } >> /home/${USERNAME}/.bashrc
 
 WORKDIR /workspace
 
