@@ -27,7 +27,7 @@ Commands:
   claude --yolo [args...]     Launch Claude with --dangerously-skip-permissions.
   codex [args...]             Launch Codex with workspace-write sandbox + on-request approval.
   codex --yolo [args...]      Launch Codex with danger-full-access sandbox + never approval.
-  both                        Open a tmux split: Claude on the left, Codex on the right.
+  both [--yolo]               Open a tmux split: Claude on the left, Codex on the right.
   firewall                    Re-run the egress firewall (sudo).
   help                        Show this help.
 EOF
@@ -52,13 +52,18 @@ run_codex() {
 }
 
 run_both() {
+    local yolo=""
+    if [[ "${1:-}" == "--yolo" ]]; then
+        yolo=" --yolo"
+        shift
+    fi
     if ! command -v tmux >/dev/null 2>&1; then
         echo "tmux is not installed — cannot run split mode." >&2
         exit 1
     fi
     local session="ai-both-$$"
-    tmux new-session -d -s "$session" -n agents "ai claude"
-    tmux split-window -h -t "$session:agents" "ai codex"
+    tmux new-session -d -s "$session" -n agents "ai claude${yolo}"
+    tmux split-window -h -t "$session:agents" "ai codex${yolo}"
     tmux select-pane -t "$session:agents.0"
     exec tmux attach -t "$session"
 }
@@ -77,7 +82,8 @@ case "${1:-help}" in
         run_codex "$@"
         ;;
     both)
-        run_both
+        shift
+        run_both "$@"
         ;;
     firewall)
         run_firewall
