@@ -4,7 +4,7 @@ A sandboxed Docker image that runs **Claude Code** and **Codex CLI** side-by-sid
 
 ## Prerequisites
 
-- Docker Desktop (macOS/Windows) or Docker Engine 24+ (Linux).
+- Docker Desktop (macOS/Windows) or Docker Engine 24+ (Linux), **running** — not just installed. Smoke-test with `docker info`; if it hangs or errors, start Docker Desktop before continuing. Otherwise `docker build` and `docker run` will block silently waiting for an absent daemon.
 - ~8 GB free disk for the image and Playwright browsers.
 - (Optional) An `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` exported in your shell. You can skip these and use interactive `claude login` / `codex login` instead — credentials persist in named volumes.
 - (Optional, macOS) An SSH agent on the host (`ssh-add -l` should not error). Docker Desktop on macOS does not natively forward `SSH_AUTH_SOCK` from the host, so `run.sh` mounts it explicitly. If git-over-ssh fails inside the container, see *Known limitations* below.

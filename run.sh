@@ -7,14 +7,21 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# Fail fast if Docker isn't running — otherwise downstream `docker` calls block
+# silently for many minutes waiting on an absent daemon socket.
+if ! docker info >/dev/null 2>&1; then
+    echo "[run.sh] Docker daemon not reachable. Start Docker Desktop (or your Docker engine) and retry." >&2
+    exit 1
+fi
+
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_DIR=${1:-$PWD}
 PROJECT_DIR=$(cd "$PROJECT_DIR" && pwd)
 
 IMAGE_TAG="agent-runtime:latest"
 
-# Build only when no image exists yet — Tim can force a rebuild with
-# `docker build` directly when he wants one.
+# Build only when no image exists yet — force a rebuild via `docker build`
+# directly when needed.
 if ! docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
     echo "[run.sh] building $IMAGE_TAG (one-time)"
     docker build -t "$IMAGE_TAG" "$SCRIPT_DIR"
