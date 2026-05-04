@@ -11,15 +11,12 @@ ARG PHP_VERSION=8.5
 ARG TZ=Europe/Berlin
 ARG USERNAME=node
 ARG GIT_DELTA_VERSION=0.18.2
-# TODO(security): pin SHA-256 — upstream dandavison/delta does not publish a
-# SHA256SUMS file with releases. Compute the hashes once locally:
-#   curl -fsSL -o /tmp/d.deb https://github.com/dandavison/delta/releases/download/0.18.2/git-delta_0.18.2_amd64.deb && sha256sum /tmp/d.deb
-#   curl -fsSL -o /tmp/d.deb https://github.com/dandavison/delta/releases/download/0.18.2/git-delta_0.18.2_arm64.deb && sha256sum /tmp/d.deb
-# then replace the placeholders below. Until then, the build will fail with a
-# checksum mismatch (intentional — a build that silently skipped the check
-# would be worse than one that loudly fails).
-ARG GIT_DELTA_SHA256_AMD64=REPLACE_ME_AMD64
-ARG GIT_DELTA_SHA256_ARM64=REPLACE_ME_ARM64
+# Upstream dandavison/delta does not publish a SHA256SUMS file with releases,
+# so these were computed locally against the GitHub release artefacts. Bump
+# them when bumping GIT_DELTA_VERSION:
+#   curl -fsSL -o /tmp/d.deb https://github.com/dandavison/delta/releases/download/${VERSION}/git-delta_${VERSION}_amd64.deb && sha256sum /tmp/d.deb
+ARG GIT_DELTA_SHA256_AMD64=1658c7b61825d411b50734f34016101309e4b6e7f5799944cf8e4ac542cebd7f
+ARG GIT_DELTA_SHA256_ARM64=937781aa7788e1510858743fff6c9a8b4a69fe0a22a7c8a69493e633227939a9
 ARG COMPOSER_VERSION=2.7.7
 
 ENV DEBIAN_FRONTEND=noninteractive
