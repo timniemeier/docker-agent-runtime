@@ -77,10 +77,22 @@ allow_baseline() {
     iptables -A OUTPUT -o lo -j ACCEPT
 
     # DNS — UDP and TCP. We need this BEFORE we DROP outbound, because the
-    # ipset population below relies on dig.
-    # DNS only to Docker's embedded resolver — prevents DNS tunneling exfil
-    iptables -A OUTPUT -d 127.0.0.11 -p udp --dport 53 -j ACCEPT
-    iptables -A OUTPUT -d 127.0.0.11 -p tcp --dport 53 -j ACCEPT
+    # ipset population below relies on dig. Allowlist whatever nameservers
+    # /etc/resolv.conf points at: on Linux Docker that's 127.0.0.11, on
+    # Docker Desktop for macOS it's typically 192.168.65.x. Hard-coding
+    # 127.0.0.11 broke DNS entirely on macOS.
+    local nameservers
+    nameservers=$(awk '/^nameserver/ {print $2}' /etc/resolv.conf)
+    if [[ -z "$nameservers" ]]; then
+        log "warn: no nameservers in /etc/resolv.conf — falling back to 127.0.0.11"
+        nameservers="127.0.0.11"
+    fi
+    while IFS= read -r ns; do
+        [[ -z "$ns" ]] && continue
+        log "allow DNS to $ns"
+        iptables -A OUTPUT -d "$ns" -p udp --dport 53 -j ACCEPT
+        iptables -A OUTPUT -d "$ns" -p tcp --dport 53 -j ACCEPT
+    done <<< "$nameservers"
 
     # No unconditional TCP 22 — SSH to allowlisted IPs is handled by the ipset rule below
 
@@ -95,8 +107,11 @@ allow_baseline() {
 add_domain() {
     local domain=$1
     local ips
+    # `\s` is a Perl-ism; mawk treats it as a literal `s`, which silently
+    # drops every line and leaves the allowlist empty. Match by field
+    # position instead — dig's +answer rows are: NAME TTL CLASS TYPE RDATA.
     ips=$(dig +noall +answer +time=3 +tries=2 A "$domain" 2>/dev/null \
-            | awk '/\sA\s/ {print $5}' | grep -E '^[0-9.]+$' || true)
+            | awk '$4 == "A" {print $5}' | grep -E '^[0-9.]+$' || true)
     if [[ -z "$ips" ]]; then
         log "warn: no A records resolved for $domain"
         return 0
@@ -182,8 +197,11 @@ populate_allowlist() {
 
     # GitHub raw / objects / codeload — needed for `gh repo clone`,
     # raw.githubusercontent.com fetches, and release tarballs.
+    # release-assets.githubusercontent.com is GitHub's newer host for binary
+    # release artefacts (gitstatusd, etc.) — without it p10k bring-up fails.
     add_domain raw.githubusercontent.com
     add_domain objects.githubusercontent.com
+    add_domain release-assets.githubusercontent.com
     add_domain codeload.github.com
 
     # Bulk GitHub IP blocks (web/api/git).

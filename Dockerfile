@@ -171,11 +171,15 @@ RUN chown root:root /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh
         /usr/local/bin/entrypoint.sh
 
 # --- Playwright browsers (chromium only) -------------------------------------
-# Install as the `node` user so the cache lands at the path mounted as a named
-# volume in devcontainer.json / docker-compose.yml.
+# OS deps must be installed as root (apt). Browsers themselves install as the
+# `node` user so the cache lands at the path mounted as a named volume in
+# devcontainer.json / docker-compose.yml. `--with-deps` would try to sudo from
+# the build shell where no tty exists, so split the two steps explicitly.
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/${USERNAME}/.cache/ms-playwright
+RUN npx --yes playwright@latest install-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
 USER ${USERNAME}
-RUN npx --yes playwright@latest install --with-deps chromium
+RUN npx --yes playwright@latest install chromium
 
 # --- User shell env -----------------------------------------------------------
 ENV CLAUDE_CONFIG_DIR=/home/${USERNAME}/.claude
