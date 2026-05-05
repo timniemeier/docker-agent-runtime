@@ -182,6 +182,15 @@ populate_allowlist() {
     # commented out by default — uncomment if you hit a download error.
     # add_domain cdn-lfs.huggingface.co
 
+    # MCP servers seeded into config/claude-settings.json.
+    # Context7 — library docs lookup.
+    add_domain mcp.context7.com
+    add_domain context7.com
+    # chrome-devtools-mcp downloads Chrome-for-Testing on first launch.
+    add_domain storage.googleapis.com
+    add_domain googlechromelabs.github.io
+    add_domain edgedl.me.gvt1.com
+
     # Custom deploy target.
     add_domain auth.scalingo.com
     add_domain cli-dl.scalingo.com

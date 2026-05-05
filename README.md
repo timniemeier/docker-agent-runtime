@@ -104,12 +104,38 @@ Edit `scripts/init-firewall.sh` and rebuild. The list is grouped by purpose (Ant
 docker run -e OPENAI_ALLOWED_DOMAINS="example.com fly.io" ... agent-runtime:latest
 ```
 
-## Adding MCP servers
+## Bundled MCP servers
 
-- **Claude:** edit `config/claude-settings.json` (the file is seeded into `~/.claude/settings.json` on first start; subsequent edits to your live settings.json are not overwritten).
+Claude is pre-wired (via the seeded `config/claude-settings.json`) with four MCP servers that work out-of-the-box across projects:
+
+| Server | Package | Purpose |
+| --- | --- | --- |
+| `playwright` | `@playwright/mcp` | Drive a real browser (chromium baked into the image) |
+| `context7` | `@upstash/context7-mcp` | Up-to-date library docs lookup |
+| `chrome-devtools` | `chrome-devtools-mcp` | Chrome DevTools Protocol — inspect pages, traces, console |
+| `github` | `@modelcontextprotocol/server-github` (via `/usr/local/bin/mcp-github`) | GitHub repo / PR / issue tooling |
+
+The `github` MCP gets its token automatically from the `gh` CLI — run `gh auth login` once and the wrapper script picks up the token at MCP launch. No PAT to manage.
+
+The firewall already allowlists the domains these servers reach (Context7, Chrome-for-Testing CDN, GitHub).
+
+### Project-specific: laravel-boost
+
+`laravel-boost` only works inside a Laravel project, so it's intentionally not bundled. Add it once per project:
+
+```bash
+composer require laravel/boost --dev
+php artisan boost:install
+```
+
+That writes a `.mcp.json` into the project root which Claude picks up automatically.
+
+### Adding more
+
+- **Claude:** edit `config/claude-settings.json` and rebuild, or edit `~/.claude/settings.json` live (not overwritten on rebuild).
 - **Codex:** edit `config/codex-config.toml` (same lifecycle). Goals are enabled there via `[features] goals = true`.
 
-The image ships with `@playwright/mcp` only. If you add an MCP server that fetches from a new domain, remember to extend the firewall allowlist.
+If a new MCP fetches from a new domain, extend `scripts/init-firewall.sh` and re-run `ai firewall`.
 
 ## Laravel sidecar profile
 
@@ -130,6 +156,14 @@ Adds a Postgres 16 container (user/db `laravel`, password `laravel`) and a Redis
 ## Changelog
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent first.
+
+### 2026-05-05 (later)
+
+**Added**
+- Bundled MCP servers in the seeded `claude-settings.json`: `playwright`, `context7`, `chrome-devtools`, and `github`. Previously only `playwright` was pre-configured.
+- `/usr/local/bin/mcp-github` wrapper that pulls the GitHub token from `gh auth token` at MCP launch — no PAT in config files.
+- Firewall allowlist extended for the new MCPs: `mcp.context7.com`, `context7.com`, `storage.googleapis.com`, `googlechromelabs.github.io`, `edgedl.me.gvt1.com`.
+- First-run banner now lists the bundled MCPs and points at the `laravel-boost` per-project recipe.
 
 ### 2026-05-05
 

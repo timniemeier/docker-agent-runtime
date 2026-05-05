@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Wrapper around the GitHub MCP server. Pulls the user's gh CLI token at
+# launch time so the user only ever has to `gh auth login` once — no
+# personal access token to copy/paste, no secrets in claude-settings.json.
+set -euo pipefail
+IFS=$'\n\t'
+
+TOKEN=$(gh auth token 2>/dev/null || true)
+if [[ -z "$TOKEN" ]]; then
+    echo "[mcp-github] no GitHub token in scope. Run 'gh auth login' inside the container first." >&2
+    exit 1
+fi
+export GITHUB_PERSONAL_ACCESS_TOKEN="$TOKEN"
+exec npx -y @modelcontextprotocol/server-github "$@"

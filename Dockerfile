@@ -158,6 +158,7 @@ COPY scripts/init-firewall.sh /usr/local/bin/init-firewall.sh
 COPY scripts/post-create.sh   /usr/local/bin/post-create.sh
 COPY scripts/post-start.sh    /usr/local/bin/post-start.sh
 COPY scripts/ai               /usr/local/bin/ai
+COPY scripts/mcp-github       /usr/local/bin/mcp-github
 COPY scripts/entrypoint.sh    /usr/local/bin/entrypoint.sh
 COPY config/claude-settings.json /etc/agent-runtime/claude-settings.json
 COPY config/codex-config.toml    /etc/agent-runtime/codex-config.toml
@@ -168,6 +169,7 @@ RUN chown root:root /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh
         /usr/local/bin/post-create.sh \
         /usr/local/bin/post-start.sh \
         /usr/local/bin/ai \
+        /usr/local/bin/mcp-github \
         /usr/local/bin/entrypoint.sh
 
 # --- Playwright browsers (chromium only) -------------------------------------
