@@ -236,24 +236,30 @@ apply_policy() {
 validate() {
     # Sanity probes. We don't fail the script on these — Tim might be
     # offline temporarily — but we surface them so misconfigurations are
-    # obvious in the post-start log.
-    if curl --max-time 5 -sf https://api.anthropic.com >/dev/null 2>&1; then
-        log "ok: api.anthropic.com reachable"
-    else
-        log "warn: api.anthropic.com NOT reachable (Claude will fail)"
-    fi
-    if curl --max-time 5 -sf https://api.openai.com >/dev/null 2>&1; then
-        log "ok: api.openai.com reachable"
-    else
-        log "warn: api.openai.com NOT reachable (Codex will fail)"
-    fi
-    # Negative control: a non-allowlisted host MUST be blocked. If it
-    # succeeds, the firewall is broken.
-    if curl --max-time 5 -sf https://example.com >/dev/null 2>&1; then
-        log "FAIL: example.com is reachable but should not be — firewall is leaky"
-        exit 1
-    else
+    # obvious in the post-start log. We only care that the TCP+TLS
+    # handshake completes; HTTP 4xx on the bare host root is fine and
+    # was previously misreported as "NOT reachable" because of `-f`.
+    probe() {
+        local label=$1 url=$2
+        local code
+        code=$(curl --max-time 5 -sS -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo 000)
+        if [[ "$code" =~ ^[1-5][0-9][0-9]$ ]]; then
+            log "ok: $label reachable (HTTP $code)"
+        else
+            log "warn: $label NOT reachable"
+        fi
+    }
+    probe "api.anthropic.com" https://api.anthropic.com/
+    probe "api.openai.com"    https://api.openai.com/
+    # Negative control: a non-allowlisted host MUST be blocked. The
+    # firewall drops outbound, so curl will time out — `code` ends up 000.
+    local control
+    control=$(curl --max-time 5 -sS -o /dev/null -w '%{http_code}' https://example.com 2>/dev/null || echo 000)
+    if [[ "$control" == "000" ]]; then
         log "ok: control test (example.com) blocked"
+    else
+        log "FAIL: example.com is reachable (HTTP $control) — firewall is leaky"
+        exit 1
     fi
 }
 
