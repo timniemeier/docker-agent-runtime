@@ -62,14 +62,16 @@ Single entry point with sensible defaults, plus YOLO toggles when you want them:
 ```bash
 ai claude              # claude with default permission prompts
 ai claude --yolo       # claude --dangerously-skip-permissions
-ai codex               # codex --sandbox workspace-write --ask-for-approval on-request
-ai codex --yolo        # codex --sandbox danger-full-access --ask-for-approval never
+ai codex               # codex --enable goals --sandbox workspace-write --ask-for-approval on-request
+ai codex --yolo        # codex --enable goals --sandbox danger-full-access --ask-for-approval never
 ai both                # tmux split: Claude left, Codex right
 ai firewall            # re-run egress allowlist (sudo)
 ai help
 ```
 
 YOLO modes print a red warning to stderr before launching.
+
+Codex Goals are enabled by default. In an interactive Codex session, use `/goal <objective>` to keep Codex working toward a long-running objective across turns. Use `/goal pause`, `/goal resume`, or `/goal clear` to manage the lifecycle.
 
 ## Security model
 
@@ -105,7 +107,7 @@ docker run -e OPENAI_ALLOWED_DOMAINS="example.com fly.io" ... agent-runtime:late
 ## Adding MCP servers
 
 - **Claude:** edit `config/claude-settings.json` (the file is seeded into `~/.claude/settings.json` on first start; subsequent edits to your live settings.json are not overwritten).
-- **Codex:** edit `config/codex-config.toml` (same lifecycle).
+- **Codex:** edit `config/codex-config.toml` (same lifecycle). Goals are enabled there via `[features] goals = true`.
 
 The image ships with `@playwright/mcp` only. If you add an MCP server that fetches from a new domain, remember to extend the firewall allowlist.
 

@@ -25,8 +25,8 @@ Usage: ai <command> [args...]
 Commands:
   claude [args...]            Launch Claude Code with default permission prompts.
   claude --yolo [args...]     Launch Claude with --dangerously-skip-permissions.
-  codex [args...]             Launch Codex with workspace-write sandbox + on-request approval.
-  codex --yolo [args...]      Launch Codex with danger-full-access sandbox + never approval.
+  codex [args...]             Launch Codex with workspace-write sandbox, on-request approval, and Goals enabled.
+  codex --yolo [args...]      Launch Codex with danger-full-access sandbox, never approval, and Goals enabled.
   both [--yolo]               Open a tmux split: Claude on the left, Codex on the right.
   firewall                    Re-run the egress firewall (sudo).
   help                        Show this help.
@@ -46,9 +46,9 @@ run_codex() {
     if [[ "${1:-}" == "--yolo" ]]; then
         shift
         warn_yolo "Codex"
-        exec codex --sandbox danger-full-access --ask-for-approval never "$@"
+        exec codex --enable goals --sandbox danger-full-access --ask-for-approval never "$@"
     fi
-    exec codex --sandbox workspace-write --ask-for-approval on-request "$@"
+    exec codex --enable goals --sandbox workspace-write --ask-for-approval on-request "$@"
 }
 
 run_both() {
