@@ -127,6 +127,44 @@ Adds a Postgres 16 container (user/db `laravel`, password `laravel`) and a Redis
 - **Firewall + corporate proxies:** if your network requires an HTTPS proxy, you'll need to allowlist the proxy CIDR and set `HTTPS_PROXY` inside the container.
 - **`--cap-add SYS_ADMIN`:** required for bubblewrap and for the iptables/ipset rules; this image is **not** suitable for running untrusted third-party code on shared hardware.
 
+## Changelog
+
+Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent first.
+
+### 2026-05-05
+
+**Fixed**
+- Firewall allowlist was always empty under `mawk`: the previous `dig` filter used a Perl-style `\s` regex that mawk treats as a literal `s`, so no IPs were ever added. Replaced with a positional `$4 == "A"` match.
+- Firewall validator falsely reported `api.anthropic.com` and `api.openai.com` as unreachable: the probe used `curl -f`, which fails on HTTP 4xx — both APIs return 404 on their bare root URL even when reachable. Now any 1xx–5xx response counts as a successful connection.
+- Firewall hard-coded DNS to `127.0.0.11`. Docker Desktop on macOS uses a different resolver address, so DNS broke entirely on Mac. Now allows whatever nameservers `/etc/resolv.conf` lists.
+- Playwright build step failed in the no-tty Docker build shell because `playwright install --with-deps` tried to escalate via `sudo`. Split into two layers: `install-deps` as `root` (apt), then browser binaries as the `node` user.
+
+**Added**
+- `release-assets.githubusercontent.com` to the egress allowlist — GitHub's new host for binary release artefacts (needed for the powerlevel10k `gitstatusd` download, among others).
+- `run.sh` pins container DNS to `1.1.1.1` + `8.8.8.8` (override `DNS_FLAGS` to change), sidestepping Docker Desktop's flaky host resolver.
+- `run.sh` accepts `EXTRA_MOUNTS=/host/path[,host:container[:ro]]…` for ad-hoc bind mounts.
+- `run.sh` auto-detects git worktrees: if `PROJECT_DIR/.git` is a file pointing at a parent repo, the parent is bind-mounted at its absolute host path so git resolves cleanly. Disable with `AUTO_WORKTREE_MOUNT=0`.
+- Codex Goals enabled by default (`--enable goals` in the `ai codex` launcher and `[features] goals = true` in `config/codex-config.toml`). Use `/goal <objective>` in an interactive Codex session; `/goal pause|resume|clear` for lifecycle.
+
+### 2026-05-04
+
+**Added**
+- oh-my-zsh + powerlevel10k via `zsh-in-docker` (script SHA-256 pinned).
+- `git-delta` 0.18.2 with verified SHA-256 for both `amd64` and `arm64`.
+
+**Fixed**
+- `ai both --yolo` now propagates `--yolo` to both agents in the tmux split (previously only Claude got it).
+- `run.sh` fails fast with a clear error when the Docker daemon isn't reachable, instead of hanging on the daemon socket.
+- `run.sh` permissions restored (`+x`).
+
+### 2026-05-04 — initial release
+
+- Sandboxed image with Claude Code + Codex CLI side-by-side.
+- iptables/ipset egress allowlist with re-runnable `ai firewall` helper.
+- Named volumes for agent logins, npm/composer/pip/playwright caches.
+- Devcontainer, Compose, and `run.sh` entry points.
+- Optional Laravel sidecar profile (Postgres 16 + Redis 7).
+
 ## Credits
 
 Firewall pattern adapted from the `anthropics/claude-code` and `openai/codex` reference devcontainers. Codex TOML schema verified against `codex-rs/config/src/config_toml.rs` and `codex-rs/config/src/mcp_types.rs` upstream.
