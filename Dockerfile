@@ -172,7 +172,8 @@ COPY config/codex-config.toml    /etc/agent-runtime/codex-config.toml
 
 # start-services needs to run postgres as root (to chown the data dir) and
 # then sudo -u postgres for the actual server. Allow that without a password.
-RUN echo "node ALL=(root) NOPASSWD: /usr/local/bin/start-services.sh" \
+# SETENV: lets post-start.sh pass NO_POSTGRES/NO_REDIS/NO_SERVICES via `sudo -E`.
+RUN echo "node ALL=(root) NOPASSWD: SETENV: /usr/local/bin/start-services.sh" \
         >> /etc/sudoers.d/agent-firewall \
     && echo "node ALL=(postgres) NOPASSWD: ALL" \
         >> /etc/sudoers.d/agent-firewall
