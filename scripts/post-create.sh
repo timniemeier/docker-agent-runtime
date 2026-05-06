@@ -65,7 +65,10 @@ box_line() {
     [[ "$plain" == *🚀* ]] && n=$((n + 1))
     local pad=$((BOX_W - n))
     (( pad < 0 )) && pad=0
-    printf '%b│%b%s%*s%b│%b\n' "$AR_CYAN" "$AR_RESET" "$colored" "$pad" '' "$AR_CYAN" "$AR_RESET"
+    # %b on $colored too — it carries `\033[...]` escapes that need to be
+    # interpreted. Previously this used %s and the literal backslashes
+    # leaked to the terminal.
+    printf '%b│%b%b%*s%b│%b\n' "$AR_CYAN" "$AR_RESET" "$colored" "$pad" '' "$AR_CYAN" "$AR_RESET"
 }
 
 # Build the dynamic "Enabled: ..." row from real flags (set by run.sh).
