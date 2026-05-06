@@ -17,15 +17,19 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # Argument parsing — pull recognised flags out before treating remaining args
-# as a project path.
-WITH_POSTGRES=${WITH_POSTGRES:-0}
-WITH_REDIS=${WITH_REDIS:-0}
+# as a project path. Sidecars default to "auto" and get enabled below if the
+# project looks like a Laravel app. Explicit flags override the auto-detect.
+WITH_POSTGRES=${WITH_POSTGRES:-auto}
+WITH_REDIS=${WITH_REDIS:-auto}
 _args=()
 for arg in "$@"; do
     case "$arg" in
         --with-postgres) WITH_POSTGRES=1 ;;
         --with-redis)    WITH_REDIS=1 ;;
         --with-laravel)  WITH_POSTGRES=1; WITH_REDIS=1 ;;
+        --no-postgres)   WITH_POSTGRES=0 ;;
+        --no-redis)      WITH_REDIS=0 ;;
+        --no-sidecars)   WITH_POSTGRES=0; WITH_REDIS=0 ;;
         *) _args+=("$arg") ;;
     esac
 done
@@ -41,6 +45,24 @@ fi
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_DIR=${1:-${PWD}}
 PROJECT_DIR=$(cd "$PROJECT_DIR" && pwd)
+
+# Auto-detect Laravel: presence of artisan + composer.json with
+# laravel/framework is the canonical signal. If it looks like Laravel,
+# enable postgres + redis sidecars by default; explicit --no-* still wins.
+is_laravel_project() {
+    [[ -f "$PROJECT_DIR/artisan" ]] || return 1
+    if [[ -f "$PROJECT_DIR/composer.json" ]]; then
+        grep -q '"laravel/framework"' "$PROJECT_DIR/composer.json" && return 0
+    fi
+    return 1
+}
+if is_laravel_project; then
+    [[ "$WITH_POSTGRES" == "auto" ]] && WITH_POSTGRES=1
+    [[ "$WITH_REDIS"    == "auto" ]] && WITH_REDIS=1
+    echo "[run.sh] Laravel project detected — enabling postgres + redis sidecars (override with --no-postgres / --no-redis / --no-sidecars)" >&2
+fi
+[[ "$WITH_POSTGRES" == "auto" ]] && WITH_POSTGRES=0
+[[ "$WITH_REDIS"    == "auto" ]] && WITH_REDIS=0
 
 # Auto-detect git worktrees: if PROJECT_DIR/.git is a *file* of the form
 # `gitdir: /abs/path/to/main/.git/worktrees/<name>`, the parent repo lives at

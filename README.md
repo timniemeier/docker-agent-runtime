@@ -39,13 +39,16 @@ docker compose --profile laravel up -d
 cd docker-agent-runtime
 ./run.sh                                       # mount $PWD at /workspace
 ./run.sh /path/to/other/repo                   # mount that repo instead
-./run.sh --with-postgres /path/to/repo         # also start postgres sidecar
-./run.sh --with-laravel  /path/to/repo         # postgres + redis sidecars
+./run.sh --no-sidecars /path/to/repo           # skip auto-started sidecars
+./run.sh --with-postgres /path/to/repo         # force postgres on for non-Laravel
+./run.sh --with-laravel  /path/to/repo         # force both sidecars on
 ```
 
 `run.sh` builds the image on first invocation, names the container by a hash of the project path (so different repos don't collide), forwards your SSH agent socket if available, and drops you into `zsh` after the firewall initialises.
 
-`--with-postgres` (or `WITH_POSTGRES=1`) starts a `postgres:16-alpine` container on a project-scoped bridge network and connects the agent to it. Inside the container, postgres is reachable at `postgres:5432` with credentials `laravel/laravel/laravel`. The standard libpq env vars (`PGHOST`, `PGUSER`, …) and Laravel env vars (`DB_HOST`, `DB_CONNECTION=pgsql`, …) are auto-injected so `php artisan migrate`, `psql`, and `phpunit` work without further configuration. Data persists across restarts in a `agent-postgres-<hash>` named volume. `--with-redis` is the same idea for redis. `--with-laravel` is shorthand for both.
+**Laravel auto-detect:** if the project directory contains an `artisan` file and a `composer.json` that requires `laravel/framework`, `run.sh` automatically starts postgres + redis sidecars. Override with `--no-postgres`, `--no-redis`, or `--no-sidecars`.
+
+**Sidecars:** `--with-postgres` (or `WITH_POSTGRES=1`) starts a `postgres:16-alpine` container on a project-scoped bridge network and connects the agent to it. Inside the container, postgres is reachable at `postgres:5432` with credentials `laravel/laravel/laravel`. The standard libpq env vars (`PGHOST`, `PGUSER`, …) and Laravel env vars (`DB_HOST`, `DB_CONNECTION=pgsql`, …) are auto-injected so `php artisan migrate`, `psql`, and `phpunit` work without further configuration. Data persists across restarts in an `agent-postgres-<hash>` named volume. `--with-redis` is the same idea for redis. `--with-laravel` is shorthand for both.
 
 ## Authentication
 
@@ -164,7 +167,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent firs
 ### 2026-05-05 (latest)
 
 **Added**
-- `run.sh --with-postgres`, `--with-redis`, `--with-laravel` — start sidecars on a project-scoped bridge network and connect the agent. Postgres is reachable at `postgres:5432` (creds `laravel/laravel/laravel`); redis at `redis:6379`. Standard libpq + Laravel env vars are auto-injected. Data persists in `agent-postgres-<hash>` / `agent-redis-<hash>` volumes.
+- Laravel auto-detect: when `run.sh` sees an `artisan` file and `laravel/framework` in `composer.json`, it now spins up postgres + redis sidecars by default. Override with `--no-postgres`, `--no-redis`, or `--no-sidecars`.
+- `run.sh --with-postgres`, `--with-redis`, `--with-laravel` — explicitly start sidecars on a project-scoped bridge network and connect the agent. Postgres is reachable at `postgres:5432` (creds `laravel/laravel/laravel`); redis at `redis:6379`. Standard libpq + Laravel env vars are auto-injected. Data persists in `agent-postgres-<hash>` / `agent-redis-<hash>` volumes.
 - Firewall auto-allows the agent's local bridge subnet (RFC1918) so traffic to sidecar IPs gets through the egress allowlist. Public-internet egress is unchanged.
 
 ### 2026-05-05 (earlier)
