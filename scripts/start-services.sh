@@ -65,6 +65,19 @@ start_postgres() {
         } >> "$PG_CONF"
     fi
 
+    # Clean up a stale postmaster.pid from a previous container that didn't
+    # shut down cleanly. pg_ctl warns "another server might be running" and
+    # bails out otherwise. Safe because we're inside a fresh container — no
+    # other postgres process can be alive across container restarts.
+    if [[ -f "$PG_DATA/postmaster.pid" ]]; then
+        local pid
+        pid=$(head -1 "$PG_DATA/postmaster.pid" 2>/dev/null || true)
+        if [[ -n "$pid" ]] && ! kill -0 "$pid" 2>/dev/null; then
+            log "removing stale postmaster.pid (pid $pid not alive)"
+            rm -f "$PG_DATA/postmaster.pid"
+        fi
+    fi
+
     if sudo -u postgres "$PG_BIN/pg_ctl" -D "$PG_DATA" status >/dev/null 2>&1; then
         log "postgres already running"
     else
@@ -76,10 +89,19 @@ start_postgres() {
         fi
     fi
 
-    # pg_ctl -w waits for ready, but the role/database creation below also
-    # wants to be sure the socket is accepting before issuing SQL.
+    # All admin SQL goes via the local unix socket (auth-local=trust set at
+    # initdb time). Using -h 127.0.0.1 would force TCP host auth (md5) which
+    # demands a password and hangs the script. Apps that connect from
+    # outside the script see md5 + the seeded password.
+    psql_admin() {
+        sudo -u postgres env -u PGHOST -u PGPORT \
+            psql -U postgres -v ON_ERROR_STOP=1 "$@"
+    }
+
+    # Wait for the socket — pg_ctl -w should already guarantee this, but
+    # the lock file race occasionally lags by a fraction of a second.
     local attempts=0
-    until sudo -u postgres psql -h 127.0.0.1 -U postgres -tAc 'select 1' >/dev/null 2>&1; do
+    until psql_admin -tAc 'select 1' >/dev/null 2>&1; do
         attempts=$((attempts + 1))
         if (( attempts > 20 )); then
             log "postgres did not become ready within 10s"
@@ -88,10 +110,9 @@ start_postgres() {
         sleep 0.5
     done
 
-    # Idempotent role/db creation. We seed two pairs:
+    # Idempotent role/db creation:
     #   postgres / postgres / postgres   — typical CI default
     #   laravel  / laravel  / laravel    — Laravel skeleton default
-    psql_admin() { sudo -u postgres psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 "$@"; }
     psql_admin -c "ALTER USER postgres WITH PASSWORD 'postgres';" >/dev/null
     if ! psql_admin -tAc "SELECT 1 FROM pg_roles WHERE rolname='laravel'" | grep -q 1; then
         psql_admin -c "CREATE ROLE laravel WITH LOGIN SUPERUSER PASSWORD 'laravel';" >/dev/null
