@@ -63,7 +63,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         postgresql \
         postgresql-contrib \
         redis-server \
+        locales \
         tzdata \
+    && sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen \
+    && locale-gen \
     && ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
     && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
