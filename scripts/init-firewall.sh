@@ -231,6 +231,26 @@ populate_allowlist() {
     fi
 }
 
+allow_local_bridge() {
+    # When the runtime is attached to a Docker bridge network with sidecars
+    # (e.g. the Laravel postgres+redis profile, or run.sh --with-postgres),
+    # the agent must be able to reach the sidecar IPs. Those IPs sit in the
+    # bridge's private CIDR (typically 172.16/12). We detect every
+    # non-default route on a docker bridge interface and allowlist its
+    # subnet. This intentionally does NOT widen public egress because the
+    # ranges are RFC1918 and not routable upstream.
+    local route_lines
+    route_lines=$(ip -4 route show | awk '$1 != "default" && $1 ~ /\// && $3 == "dev" {print $1}')
+    if [[ -z "$route_lines" ]]; then
+        return 0
+    fi
+    while IFS= read -r cidr; do
+        [[ -z "$cidr" ]] && continue
+        log "allow local bridge subnet: $cidr"
+        ipset add allowed-domains "$cidr" -exist
+    done <<< "$route_lines"
+}
+
 apply_policy() {
     # OUTPUT: only allow the curated set, then default DROP at the bottom.
     iptables -A OUTPUT -m set --match-set allowed-domains dst -j ACCEPT
@@ -278,6 +298,7 @@ main() {
     flush_all
     allow_baseline
     populate_allowlist
+    allow_local_bridge
     apply_policy
     validate
     log "firewall initialized"
