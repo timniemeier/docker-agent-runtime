@@ -160,6 +160,7 @@ RUN echo "${USERNAME} ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" \
     && chmod 0440 /etc/sudoers.d/agent-firewall
 
 # --- Copy scripts and config templates ---------------------------------------
+COPY scripts/agent-output.sh    /usr/local/lib/agent-output.sh
 COPY scripts/init-firewall.sh   /usr/local/bin/init-firewall.sh
 COPY scripts/post-create.sh     /usr/local/bin/post-create.sh
 COPY scripts/post-start.sh      /usr/local/bin/post-start.sh

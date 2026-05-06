@@ -9,6 +9,9 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# shellcheck disable=SC1091
+source /usr/local/lib/agent-output.sh
+
 PG_DATA=${PGDATA:-/var/lib/postgresql/data}
 PG_BIN=$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -1 || true)
 PG_CONF="$PG_DATA/postgresql.conf"
@@ -17,11 +20,9 @@ PG_LOG=/var/log/postgresql/agent.log
 mkdir -p "$(dirname "$PG_LOG")"
 chown postgres:postgres "$(dirname "$PG_LOG")" || true
 
-log() { printf '[start-services] %s\n' "$*" >&2; }
-
 start_postgres() {
     if [[ -z "$PG_BIN" || ! -x "$PG_BIN/postgres" ]]; then
-        log "postgresql server binary not found under /usr/lib/postgresql/*"
+        log_warn "postgresql server binary not found under /usr/lib/postgresql/*"
         return 1
     fi
 
@@ -35,12 +36,12 @@ start_postgres() {
     # halfway. initdb refuses to run on a non-empty dir, and pg_ctl can't
     # start without PG_VERSION — wipe the partial state and start fresh.
     if [[ -d "$PG_DATA" ]] && [[ ! -s "$PG_DATA/PG_VERSION" ]] && [[ -n "$(ls -A "$PG_DATA" 2>/dev/null)" ]]; then
-        log "found partial postgres data dir without PG_VERSION; cleaning $PG_DATA"
+        log_info "Cleaning partial postgres data dir at $PG_DATA"
         find "$PG_DATA" -mindepth 1 -delete
     fi
 
     if [[ ! -s "$PG_DATA/PG_VERSION" ]]; then
-        log "initialising postgres data dir at $PG_DATA"
+        log_info "Initialising postgres data dir at $PG_DATA"
         # Force a locale that's always present (C.UTF-8) regardless of
         # whatever LC_* the parent shell happens to have set, so initdb
         # doesn't bail with "invalid locale settings".
@@ -51,7 +52,7 @@ start_postgres() {
                     --encoding=UTF8 \
                     --auth-local=trust --auth-host=md5 \
                     --username=postgres >/dev/null; then
-            log "initdb failed — see output above"
+            log_warn "initdb failed — see output above"
             return 1
         fi
         {
@@ -73,18 +74,18 @@ start_postgres() {
         local pid
         pid=$(head -1 "$PG_DATA/postmaster.pid" 2>/dev/null || true)
         if [[ -n "$pid" ]] && ! kill -0 "$pid" 2>/dev/null; then
-            log "removing stale postmaster.pid (pid $pid not alive)"
+            log_info "Removing stale postmaster.pid (pid $pid not alive)"
             rm -f "$PG_DATA/postmaster.pid"
         fi
     fi
 
     if sudo -u postgres "$PG_BIN/pg_ctl" -D "$PG_DATA" status >/dev/null 2>&1; then
-        log "postgres already running"
+        log_info "Postgres already running"
     else
-        log "starting postgres on 127.0.0.1:5432"
+        log_info "Starting postgres on 127.0.0.1:5432"
         if ! sudo -u postgres "$PG_BIN/pg_ctl" -D "$PG_DATA" -l "$PG_LOG" \
                 -o "-c listen_addresses=127.0.0.1" -w start >/dev/null; then
-            log "pg_ctl start failed — see $PG_LOG"
+            log_warn "pg_ctl start failed — see $PG_LOG"
             return 1
         fi
     fi
@@ -104,7 +105,7 @@ start_postgres() {
     until psql_admin -tAc 'select 1' >/dev/null 2>&1; do
         attempts=$((attempts + 1))
         if (( attempts > 20 )); then
-            log "postgres did not become ready within 10s"
+            log_warn "Postgres did not become ready within 10s"
             return 1
         fi
         sleep 0.5
@@ -127,16 +128,16 @@ start_postgres() {
         echo "host    all    all    127.0.0.1/32    md5" >> "$PG_DATA/pg_hba.conf"
         sudo -u postgres "$PG_BIN/pg_ctl" -D "$PG_DATA" reload >/dev/null
     fi
-    log "postgres ready on 127.0.0.1:5432 (roles: postgres, laravel)"
+    log_ok "Postgres ready on 127.0.0.1:5432 (roles: postgres, laravel)"
     return 0
 }
 
 start_redis() {
     if pgrep -f 'redis-server.*127\.0\.0\.1:6379' >/dev/null; then
-        log "redis already running"
+        log_info "Redis already running"
         return 0
     fi
-    log "starting redis on 127.0.0.1:6379"
+    log_info "Starting redis on 127.0.0.1:6379"
     redis-server --daemonize yes \
         --bind 127.0.0.1 \
         --port 6379 \
@@ -149,8 +150,8 @@ start_redis() {
 # Skip individually with NO_POSTGRES=1 / NO_REDIS=1 (set via run.sh
 # --no-postgres / --no-redis). Skip both with NO_SERVICES=1.
 if [[ "${NO_SERVICES:-0}" != "1" && "${NO_POSTGRES:-0}" != "1" ]]; then
-    start_postgres || log "postgres start failed (continuing)"
+    start_postgres || log_warn "Postgres start failed (continuing)"
 fi
 if [[ "${NO_SERVICES:-0}" != "1" && "${NO_REDIS:-0}" != "1" ]]; then
-    start_redis || log "redis start failed (continuing)"
+    start_redis || log_warn "Redis start failed (continuing)"
 fi

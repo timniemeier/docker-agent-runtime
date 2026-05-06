@@ -20,11 +20,12 @@ IFS=$'\n\t'
 # individual `dig` lookups to come back empty without aborting the whole
 # script — some domains return empty over IPv6-only resolvers.
 
-log() { printf '[firewall] %s\n' "$*" >&2; }
+# shellcheck disable=SC1091
+source /usr/local/lib/agent-output.sh
 
 require_root() {
     if [[ $EUID -ne 0 ]]; then
-        log "must run as root (use sudo)"
+        log_warn "Firewall must run as root (use sudo)"
         exit 1
     fi
 }
@@ -63,7 +64,7 @@ ensure_dns_fallback() {
         echo "nameserver 8.8.8.8"
         echo "options timeout:1 attempts:1"
     } >> /etc/resolv.conf
-    log "appended public DNS fallback (1.1.1.1, 8.8.8.8) to /etc/resolv.conf"
+    log_info "DNS fallback appended (1.1.1.1, 8.8.8.8)"
 }
 
 flush_all() {
@@ -109,12 +110,12 @@ allow_baseline() {
     local nameservers
     nameservers=$(awk '/^nameserver/ {print $2}' /etc/resolv.conf)
     if [[ -z "$nameservers" ]]; then
-        log "warn: no nameservers in /etc/resolv.conf — falling back to 127.0.0.11"
+        log_warn "No nameservers in /etc/resolv.conf — falling back to 127.0.0.11"
         nameservers="127.0.0.11"
     fi
     while IFS= read -r ns; do
         [[ -z "$ns" ]] && continue
-        log "allow DNS to $ns"
+        log_info "DNS allowed: $ns"
         iptables -A OUTPUT -d "$ns" -p udp --dport 53 -j ACCEPT
         iptables -A OUTPUT -d "$ns" -p tcp --dport 53 -j ACCEPT
     done <<< "$nameservers"
@@ -138,7 +139,7 @@ add_domain() {
     ips=$(dig +noall +answer +time=3 +tries=2 A "$domain" 2>/dev/null \
             | awk '$4 == "A" {print $5}' | grep -E '^[0-9.]+$' || true)
     if [[ -z "$ips" ]]; then
-        log "warn: no A records resolved for $domain"
+        log_warn "No A records resolved for $domain"
         return 0
     fi
     while IFS= read -r ip; do
@@ -152,7 +153,7 @@ add_github_meta() {
     local meta
     meta=$(curl --retry 2 --max-time 10 -fsSL https://api.github.com/meta || true)
     if [[ -z "$meta" ]]; then
-        log "warn: api.github.com/meta unreachable; GitHub IPs not seeded"
+        log_warn "api.github.com/meta unreachable; GitHub IPs not seeded"
         return 0
     fi
     local cidrs
@@ -160,7 +161,7 @@ add_github_meta() {
         | jq -r '(.web + .api + .git)[] | select(test(":") | not)' \
         | aggregate -q || true)
     if [[ -z "$cidrs" ]]; then
-        log "warn: GitHub meta CIDRs empty after aggregate"
+        log_warn "GitHub meta CIDRs empty after aggregate"
         return 0
     fi
     while IFS= read -r cidr; do
@@ -247,10 +248,10 @@ populate_allowlist() {
     if [[ -n "${OPENAI_ALLOWED_DOMAINS:-}" ]]; then
         for d in $OPENAI_ALLOWED_DOMAINS; do
             if [[ "$d" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-                log "extra allowlist domain: $d"
+                log_info "Extra allowlist domain: $d"
                 add_domain "$d"
             else
-                echo "warn: skipping invalid domain in OPENAI_ALLOWED_DOMAINS: $d" >&2
+                log_warn "Skipping invalid domain in OPENAI_ALLOWED_DOMAINS: $d"
             fi
         done
     fi
@@ -271,7 +272,7 @@ allow_local_bridge() {
     fi
     while IFS= read -r cidr; do
         [[ -z "$cidr" ]] && continue
-        log "allow local bridge subnet: $cidr"
+        log_info "Local bridge subnet allowed: $cidr"
         ipset add allowed-domains "$cidr" -exist
     done <<< "$route_lines"
 }
@@ -308,9 +309,9 @@ validate() {
         local code
         code=$(http_code "$url")
         if [[ "$code" =~ ^[1-5][0-9][0-9]$ ]]; then
-            log "ok: $label reachable (HTTP $code)"
+            log_ok "$label reachable"
         else
-            log "warn: $label NOT reachable"
+            log_warn "$label NOT reachable"
         fi
     }
     probe "api.anthropic.com" https://api.anthropic.com/
@@ -320,9 +321,9 @@ validate() {
     local control
     control=$(http_code https://example.com)
     if [[ "$control" == "000" ]]; then
-        log "ok: control test (example.com) blocked"
+        log_ok "Control test blocked example.com"
     else
-        log "FAIL: example.com is reachable (HTTP $control) — firewall is leaky"
+        log_warn "example.com is reachable (HTTP $control) — firewall is leaky"
         exit 1
     fi
 }
@@ -337,7 +338,7 @@ main() {
     allow_local_bridge
     apply_policy
     validate
-    log "firewall initialized"
+    log_ok "Firewall initialized"
 }
 
 main "$@"
