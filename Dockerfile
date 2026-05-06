@@ -60,6 +60,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-pip \
         python3-venv \
+        postgresql \
+        postgresql-contrib \
+        redis-server \
         tzdata \
     && ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
@@ -154,20 +157,29 @@ RUN echo "${USERNAME} ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" \
     && chmod 0440 /etc/sudoers.d/agent-firewall
 
 # --- Copy scripts and config templates ---------------------------------------
-COPY scripts/init-firewall.sh /usr/local/bin/init-firewall.sh
-COPY scripts/post-create.sh   /usr/local/bin/post-create.sh
-COPY scripts/post-start.sh    /usr/local/bin/post-start.sh
-COPY scripts/ai               /usr/local/bin/ai
-COPY scripts/mcp-github       /usr/local/bin/mcp-github
-COPY scripts/entrypoint.sh    /usr/local/bin/entrypoint.sh
+COPY scripts/init-firewall.sh   /usr/local/bin/init-firewall.sh
+COPY scripts/post-create.sh     /usr/local/bin/post-create.sh
+COPY scripts/post-start.sh      /usr/local/bin/post-start.sh
+COPY scripts/start-services.sh  /usr/local/bin/start-services.sh
+COPY scripts/ai                 /usr/local/bin/ai
+COPY scripts/mcp-github         /usr/local/bin/mcp-github
+COPY scripts/entrypoint.sh      /usr/local/bin/entrypoint.sh
 COPY config/claude-settings.json /etc/agent-runtime/claude-settings.json
 COPY config/codex-config.toml    /etc/agent-runtime/codex-config.toml
+
+# start-services needs to run postgres as root (to chown the data dir) and
+# then sudo -u postgres for the actual server. Allow that without a password.
+RUN echo "node ALL=(root) NOPASSWD: /usr/local/bin/start-services.sh" \
+        >> /etc/sudoers.d/agent-firewall \
+    && echo "node ALL=(postgres) NOPASSWD: ALL" \
+        >> /etc/sudoers.d/agent-firewall
 
 RUN chown root:root /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh \
     && chmod 0755 \
         /usr/local/bin/init-firewall.sh \
         /usr/local/bin/post-create.sh \
         /usr/local/bin/post-start.sh \
+        /usr/local/bin/start-services.sh \
         /usr/local/bin/ai \
         /usr/local/bin/mcp-github \
         /usr/local/bin/entrypoint.sh

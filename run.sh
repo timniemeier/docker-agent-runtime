@@ -104,59 +104,21 @@ PROJECT_HASH=$(printf '%s\n%s\n%s\n%s' \
     | shasum | awk '{print substr($1,1,8)}')
 CONTAINER_NAME="agent-${PROJECT_HASH}"
 
-# --- Optional sidecars (postgres / redis) ------------------------------------
-# When sidecars are requested, the agent and the sidecars share a custom
-# bridge network so they can resolve each other by alias (postgres / redis).
-# The local-bridge subnet is auto-allowed in init-firewall.sh, so traffic
-# to the sidecar IPs gets through the egress allowlist.
-NETWORK_NAME=""
-NET_FLAGS=()
-if [[ "$WITH_POSTGRES" == "1" || "$WITH_REDIS" == "1" ]]; then
-    NETWORK_NAME="agent-net-${PROJECT_HASH}"
-    if ! docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
-        docker network create "$NETWORK_NAME" >/dev/null
-        echo "[run.sh] created docker network $NETWORK_NAME" >&2
-    fi
-    NET_FLAGS=(--network "$NETWORK_NAME")
-fi
-
+# --- Postgres + Redis: in-container on 127.0.0.1 ------------------------------
+# Earlier we started sidecar containers on a custom bridge network. That fell
+# over because Docker Desktop's embedded DNS for user-defined bridges flakes
+# on macOS, so service-name resolution (postgres → IP) intermittently failed.
+# CI configs typically expect 127.0.0.1 anyway, so we now start postgres and
+# redis as services *inside* the agent container at loopback. start-services.sh
+# (invoked from post-start.sh) does the actual bring-up. Here we just toggle
+# the env vars and mount a per-project postgres data volume so DB state
+# persists across container restarts.
+PG_VOL=""
 if [[ "$WITH_POSTGRES" == "1" ]]; then
-    PG_NAME="pg-${PROJECT_HASH}"
-    PG_VOL="agent-postgres-${PROJECT_HASH}"
-    if docker ps -a --format '{{.Names}}' | grep -qx "$PG_NAME"; then
-        if ! docker ps --format '{{.Names}}' | grep -qx "$PG_NAME"; then
-            docker start "$PG_NAME" >/dev/null
-            echo "[run.sh] resumed postgres sidecar ($PG_NAME)" >&2
-        fi
-    else
-        docker run -d \
-            --name "$PG_NAME" \
-            --network "$NETWORK_NAME" \
-            --network-alias postgres \
-            -e POSTGRES_USER=laravel \
-            -e POSTGRES_PASSWORD=laravel \
-            -e POSTGRES_DB=laravel \
-            -v "$PG_VOL:/var/lib/postgresql/data" \
-            postgres:16-alpine >/dev/null
-        echo "[run.sh] started postgres sidecar ($PG_NAME) on $NETWORK_NAME" >&2
-    fi
-fi
-
-if [[ "$WITH_REDIS" == "1" ]]; then
-    R_NAME="redis-${PROJECT_HASH}"
-    if docker ps -a --format '{{.Names}}' | grep -qx "$R_NAME"; then
-        if ! docker ps --format '{{.Names}}' | grep -qx "$R_NAME"; then
-            docker start "$R_NAME" >/dev/null
-            echo "[run.sh] resumed redis sidecar ($R_NAME)" >&2
-        fi
-    else
-        docker run -d \
-            --name "$R_NAME" \
-            --network "$NETWORK_NAME" \
-            --network-alias redis \
-            redis:7-alpine >/dev/null
-        echo "[run.sh] started redis sidecar ($R_NAME) on $NETWORK_NAME" >&2
-    fi
+    # Renamed from agent-postgres-* (prior sidecar era used postgres:16-alpine
+    # volumes that the in-container debian postgres can't read). Old volumes
+    # can be `docker volume rm`'d manually.
+    PG_VOL="agent-pgdata-${PROJECT_HASH}"
 fi
 
 CAPS=(
@@ -188,20 +150,28 @@ if [[ -n "${OPENAI_API_KEY:-}" ]]; then
 fi
 ENVS+=(-e "TZ=Europe/Berlin")
 
-# Standard libpq + Laravel env vars so PHP / artisan / phpunit / psql find
-# the postgres sidecar without further configuration when --with-postgres
-# is on. Anything already set by the user wins (Docker -e ordering: last
-# value applies, but here the user can still override via shell exports
-# inside the container).
+# Tell start-services.sh which services to skip via the same flags users
+# already understand. Default is "start them all".
+if [[ "$WITH_POSTGRES" == "0" ]]; then
+    ENVS+=(-e "NO_POSTGRES=1")
+fi
+if [[ "$WITH_REDIS" == "0" ]]; then
+    ENVS+=(-e "NO_REDIS=1")
+fi
+
+# Standard libpq + Laravel + Redis env vars so PHP / artisan / phpunit / psql
+# / cache code find the in-container services on loopback without any
+# further configuration. Anything already set by the user wins via runtime
+# `export` inside the shell.
 if [[ "$WITH_POSTGRES" == "1" ]]; then
     ENVS+=(
-        -e "PGHOST=postgres"
+        -e "PGHOST=127.0.0.1"
         -e "PGPORT=5432"
         -e "PGUSER=laravel"
         -e "PGPASSWORD=laravel"
         -e "PGDATABASE=laravel"
         -e "DB_CONNECTION=pgsql"
-        -e "DB_HOST=postgres"
+        -e "DB_HOST=127.0.0.1"
         -e "DB_PORT=5432"
         -e "DB_DATABASE=laravel"
         -e "DB_USERNAME=laravel"
@@ -210,7 +180,7 @@ if [[ "$WITH_POSTGRES" == "1" ]]; then
 fi
 if [[ "$WITH_REDIS" == "1" ]]; then
     ENVS+=(
-        -e "REDIS_HOST=redis"
+        -e "REDIS_HOST=127.0.0.1"
         -e "REDIS_PORT=6379"
     )
 fi
@@ -233,6 +203,10 @@ VOLS=(
     -v "agent-pip:/home/node/.cache/pip"
     -v "agent-playwright:/home/node/.cache/ms-playwright"
 )
+
+if [[ -n "$PG_VOL" ]]; then
+    VOLS+=(-v "$PG_VOL:/var/lib/postgresql/data")
+fi
 
 if [[ -f "$HOME/.gitconfig" ]]; then
     VOLS+=(-v "$HOME/.gitconfig:/home/node/.gitconfig:ro")
@@ -273,7 +247,6 @@ exec docker run -it --rm \
     --init \
     "${CAPS[@]}" \
     "${DNS_FLAGS[@]}" \
-    "${NET_FLAGS[@]}" \
     "${LIMITS[@]}" \
     "${ENVS[@]}" \
     "${SSH_MOUNT[@]}" \

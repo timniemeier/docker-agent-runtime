@@ -66,9 +66,15 @@ agent ~/projects/my-laravel-app        # auto-detects Laravel, starts sidecars
 agent --no-sidecars ~/projects/foo     # all the run.sh flags work
 ```
 
-**Laravel auto-detect:** if the project directory contains an `artisan` file and a `composer.json` that requires `laravel/framework`, `run.sh` automatically starts postgres + redis sidecars. Override with `--no-postgres`, `--no-redis`, or `--no-sidecars`.
+**Laravel auto-detect:** if the project directory contains an `artisan` file and a `composer.json` that requires `laravel/framework`, `run.sh` automatically starts postgres + redis (in-container, on loopback). Override with `--no-postgres`, `--no-redis`, or `--no-sidecars`.
 
-**Sidecars:** `--with-postgres` (or `WITH_POSTGRES=1`) starts a `postgres:16-alpine` container on a project-scoped bridge network and connects the agent to it. Inside the container, postgres is reachable at `postgres:5432` with credentials `laravel/laravel/laravel`. The standard libpq env vars (`PGHOST`, `PGUSER`, …) and Laravel env vars (`DB_HOST`, `DB_CONNECTION=pgsql`, …) are auto-injected so `php artisan migrate`, `psql`, and `phpunit` work without further configuration. Data persists across restarts in an `agent-postgres-<hash>` named volume. `--with-redis` is the same idea for redis. `--with-laravel` is shorthand for both.
+**In-container services:** postgres and redis run *inside* the agent container — bound to `127.0.0.1:5432` and `127.0.0.1:6379`. This matches typical CI configuration and avoids Docker Desktop's flaky bridge-network DNS. Standard libpq env vars (`PGHOST=127.0.0.1`, `PGUSER`, `PGPASSWORD`, …) and Laravel env vars (`DB_CONNECTION=pgsql`, `DB_HOST=127.0.0.1`, …) are pre-injected so `php artisan migrate`, `psql`, `phpunit`, and Laravel app code all work without further configuration.
+
+Postgres data persists across restarts in an `agent-pgdata-<hash>` named volume. Two roles are seeded: `postgres`/`postgres` (superuser, classic CI default) and `laravel`/`laravel` (Laravel skeleton default). To create extra databases (e.g. a project-specific test DB):
+
+```bash
+psql -h 127.0.0.1 -U postgres -c 'CREATE DATABASE clever_hr_testing;'
+```
 
 ## Authentication
 
@@ -186,9 +192,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent firs
 
 ### 2026-05-05 (latest)
 
+**Changed**
+- Postgres + Redis now run **inside** the agent container on `127.0.0.1` instead of as separate sidecar containers on a custom bridge network. The bridge approach kept tripping over Docker Desktop's embedded DNS (service-name resolution stalled intermittently on macOS). Loopback is reliable, matches CI, and removes a whole class of "postgres unreachable" failures. New volume name: `agent-pgdata-<hash>` (was `agent-postgres-<hash>` — the old volumes are unreadable by the in-container postgres because the prior sidecar used `postgres:16-alpine` while bookworm ships PG 15; `docker volume rm` the old ones).
+- Two roles seeded automatically: `postgres`/`postgres` (superuser) and `laravel`/`laravel`.
+
 **Added**
+- `scripts/start-services.sh` — idempotent service-bringup invoked from `post-start.sh`. Honours `NO_POSTGRES=1`, `NO_REDIS=1`, `NO_SERVICES=1`.
 - `scripts/install-host-alias.sh` — host-side installer that adds an idempotent `agent` alias (override with `ALIAS_NAME=…`) to `~/.zshrc` / `~/.bashrc` / `~/.bash_profile`. Re-running replaces the existing block in place, so moving the repo just needs one re-run.
-- Laravel auto-detect: when `run.sh` sees an `artisan` file and `laravel/framework` in `composer.json`, it now spins up postgres + redis sidecars by default. Override with `--no-postgres`, `--no-redis`, or `--no-sidecars`.
+- Laravel auto-detect: when `run.sh` sees an `artisan` file and `laravel/framework` in `composer.json`, it now starts postgres + redis by default. Override with `--no-postgres`, `--no-redis`, or `--no-sidecars`.
 - `run.sh --with-postgres`, `--with-redis`, `--with-laravel` — explicitly start sidecars on a project-scoped bridge network and connect the agent. Postgres is reachable at `postgres:5432` (creds `laravel/laravel/laravel`); redis at `redis:6379`. Standard libpq + Laravel env vars are auto-injected. Data persists in `agent-postgres-<hash>` / `agent-redis-<hash>` volumes.
 - Firewall auto-allows the agent's local bridge subnet (RFC1918) so traffic to sidecar IPs gets through the egress allowlist. Public-internet egress is unchanged.
 
