@@ -22,18 +22,75 @@ if [[ ! -f "$CODEX_DIR/config.toml" ]] && [[ -f /etc/agent-runtime/codex-config.
     cp /etc/agent-runtime/codex-config.toml "$CODEX_DIR/config.toml"
 fi
 
-# Welcome banner. printf %b expands the AR_* color vars (empty when not a
-# TTY or NO_COLOR is set) so plain log files don't pick up any escape codes.
-printf '%b' "
-${AR_CYAN}╭────────────────────────────────────────────────────────────╮${AR_RESET}
-${AR_CYAN}│${AR_RESET}                                                            ${AR_CYAN}│${AR_RESET}
-${AR_CYAN}│${AR_RESET}   🚀  ${AR_BOLD}Agent Runtime Ready${AR_RESET}                                  ${AR_CYAN}│${AR_RESET}
-${AR_CYAN}│${AR_RESET}                                                            ${AR_CYAN}│${AR_RESET}
-${AR_CYAN}│${AR_RESET}   Laravel project detected                                 ${AR_CYAN}│${AR_RESET}
-${AR_CYAN}│${AR_RESET}   Enabled: ${AR_GREEN}PostgreSQL${AR_RESET} · ${AR_GREEN}Redis${AR_RESET}                              ${AR_CYAN}│${AR_RESET}
-${AR_CYAN}│${AR_RESET}                                                            ${AR_CYAN}│${AR_RESET}
-${AR_CYAN}╰────────────────────────────────────────────────────────────╯${AR_RESET}
+# --- Welcome banner ---------------------------------------------------------
+# Builds a fixed-width box (60 cols inner) whose middle rows reflect the
+# actual project shape and which services run.sh decided to start. Falls
+# back to plain ASCII when not on a TTY (AR_* vars from agent-output.sh
+# are empty in that case).
+BOX_W=60
 
+box_top()   { printf '%b╭%b%b\n' "$AR_CYAN" "$(printf '─%.0s' $(seq 1 $BOX_W))" "╮${AR_RESET}"; }
+box_bot()   { printf '%b╰%b%b\n' "$AR_CYAN" "$(printf '─%.0s' $(seq 1 $BOX_W))" "╯${AR_RESET}"; }
+box_blank() { printf '%b│%b%*s%b│%b\n' "$AR_CYAN" "$AR_RESET" "$BOX_W" '' "$AR_CYAN" "$AR_RESET"; }
+
+# Prints one box row. $1 = plain content (no escapes, used to compute
+# padding), $2 = same content with optional escapes (defaults to $1).
+# 🚀 is one character but two terminal columns; subtract 1 from pad when
+# present.
+box_line() {
+    local plain=$1
+    local colored=${2:-$1}
+    local n=${#plain}
+    [[ "$plain" == *🚀* ]] && n=$((n + 1))
+    local pad=$((BOX_W - n))
+    (( pad < 0 )) && pad=0
+    printf '%b│%b%s%*s%b│%b\n' "$AR_CYAN" "$AR_RESET" "$colored" "$pad" '' "$AR_CYAN" "$AR_RESET"
+}
+
+# Build the dynamic "Enabled: ..." row from real flags (set by run.sh).
+build_services_line() {
+    local plain="" colored=""
+    if [[ "${AGENT_WITH_POSTGRES:-0}" == "1" ]]; then
+        plain="PostgreSQL"
+        colored="${AR_GREEN}PostgreSQL${AR_RESET}"
+    fi
+    if [[ "${AGENT_WITH_REDIS:-0}" == "1" ]]; then
+        if [[ -n "$plain" ]]; then
+            plain+=" · Redis"
+            colored+=" · ${AR_GREEN}Redis${AR_RESET}"
+        else
+            plain="Redis"
+            colored="${AR_GREEN}Redis${AR_RESET}"
+        fi
+    fi
+    if [[ -n "$plain" ]]; then
+        SERVICES_PLAIN="   Enabled: $plain"
+        SERVICES_COLORED="   Enabled: $colored"
+    fi
+}
+
+SERVICES_PLAIN=""
+SERVICES_COLORED=""
+build_services_line
+
+echo
+box_top
+box_blank
+box_line "   🚀  Agent Runtime Ready" "   🚀  ${AR_BOLD}Agent Runtime Ready${AR_RESET}"
+box_blank
+if [[ "${AGENT_LARAVEL_DETECTED:-0}" == "1" ]]; then
+    box_line "   Laravel project detected"
+fi
+if [[ -n "$SERVICES_PLAIN" ]]; then
+    box_line "$SERVICES_PLAIN" "$SERVICES_COLORED"
+fi
+if [[ "${AGENT_LARAVEL_DETECTED:-0}" == "1" ]] || [[ -n "$SERVICES_PLAIN" ]]; then
+    box_blank
+fi
+box_bot
+
+# --- Body ------------------------------------------------------------------
+printf '%b' "
   ${AR_BOLD}First run${AR_RESET}
 
     ${AR_DIM}1.${AR_RESET} Authenticate AI tools
@@ -57,13 +114,20 @@ ${AR_CYAN}╰──────────────────────�
     ${AR_GREEN}✓${AR_RESET} context7          Fresh library docs
     ${AR_GREEN}✓${AR_RESET} chrome-devtools   Chrome DevTools Protocol
     ${AR_GREEN}✓${AR_RESET} github            Repo, PR, and issue tools
+"
 
+# Laravel Boost recipe is only relevant inside an actual Laravel project.
+if [[ "${AGENT_LARAVEL_DETECTED:-0}" == "1" ]]; then
+    printf '%b' "
 
   ${AR_BOLD}Laravel Boost${AR_RESET}
 
     ${AR_CYAN}composer require laravel/boost --dev${AR_RESET}
     ${AR_CYAN}php artisan boost:install${AR_RESET}
+"
+fi
 
+printf '%b' "
 
   ${AR_BOLD}Sidecars${AR_RESET}
 

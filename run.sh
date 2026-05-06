@@ -56,10 +56,11 @@ is_laravel_project() {
     fi
     return 1
 }
+LARAVEL_DETECTED=0
 if is_laravel_project; then
+    LARAVEL_DETECTED=1
     [[ "$WITH_POSTGRES" == "auto" ]] && WITH_POSTGRES=1
     [[ "$WITH_REDIS"    == "auto" ]] && WITH_REDIS=1
-    echo "[run.sh] Laravel project detected — enabling postgres + redis sidecars (override with --no-postgres / --no-redis / --no-sidecars)" >&2
 fi
 [[ "$WITH_POSTGRES" == "auto" ]] && WITH_POSTGRES=0
 [[ "$WITH_REDIS"    == "auto" ]] && WITH_REDIS=0
@@ -149,6 +150,14 @@ if [[ -n "${OPENAI_API_KEY:-}" ]]; then
     ENVS+=(-e "OPENAI_API_KEY=$OPENAI_API_KEY")
 fi
 ENVS+=(-e "TZ=Europe/Berlin")
+
+# Inform the in-container welcome banner of the actual project shape so
+# it doesn't lie about Laravel detection or which services are running.
+ENVS+=(
+    -e "AGENT_LARAVEL_DETECTED=$LARAVEL_DETECTED"
+    -e "AGENT_WITH_POSTGRES=$WITH_POSTGRES"
+    -e "AGENT_WITH_REDIS=$WITH_REDIS"
+)
 
 # Tell start-services.sh which services to skip via the same flags users
 # already understand. Default is "start them all".
