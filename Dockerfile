@@ -241,6 +241,12 @@ RUN curl -fsSL -o /tmp/zsh-in-docker.sh \
         -a 'setopt INC_APPEND_HISTORY SHARE_HISTORY' \
         -a 'eval "$(direnv hook zsh)"' \
         -a 'export PATH=/usr/local/share/npm-global/bin:$HOME/.composer/vendor/bin:$HOME/.local/bin:$PATH' \
+        -a '# Defensive: pop any leftover kitty keyboard protocol push.' \
+        -a '# A TUI (claude/codex) that exits abnormally can leave the terminal' \
+        -a '# in a mode where each keypress echoes its CSI-u response into the' \
+        -a '# input buffer, making the next shell unusable. This is a no-op when' \
+        -a '# the stack is already empty.' \
+        -a '[[ -t 1 ]] && printf "\\e[<u" 2>/dev/null' \
         -x && \
     rm /tmp/zsh-in-docker.sh
 
