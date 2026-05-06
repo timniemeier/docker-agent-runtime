@@ -21,27 +21,52 @@ if [[ ! -f "$CODEX_DIR/config.toml" ]] && [[ -f /etc/agent-runtime/codex-config.
     echo "[post-create] seeded default Codex config.toml"
 fi
 
-cat <<'EOF'
+# Banner. Single-quoted heredoc keeps the \033 literals intact; printf %b
+# then expands them to real ANSI escape bytes at print time.
+printf '%b' "$(cat <<'BANNER'
 
-------------------------------------------------------------
-  Agent runtime ready.
+\033[1;36m╭────────────────────────────────────────────────────────────╮\033[0m
+\033[1;36m│\033[0m                                                            \033[1;36m│\033[0m
+\033[1;36m│\033[0m   🚀  \033[1mAgent Runtime Ready\033[0m                                  \033[1;36m│\033[0m
+\033[1;36m│\033[0m                                                            \033[1;36m│\033[0m
+\033[1;36m│\033[0m   Laravel project detected                                 \033[1;36m│\033[0m
+\033[1;36m│\033[0m   Enabled: \033[32mPostgreSQL\033[0m · \033[32mRedis\033[0m                              \033[1;36m│\033[0m
+\033[1;36m│\033[0m                                                            \033[1;36m│\033[0m
+\033[1;36m╰────────────────────────────────────────────────────────────╯\033[0m
 
-  First-run checklist:
-    1. Log in:   `claude login`   and   `codex login`
-       (credentials persist in named volumes across rebuilds.)
-    2. GitHub:   `gh auth login`  — also powers the GitHub MCP via
-                 the /usr/local/bin/mcp-github wrapper.
-    3. Try:      `ai claude`  or  `ai codex`
-    4. Review the firewall: `cat /usr/local/bin/init-firewall.sh`
+  \033[1mFirst run\033[0m
 
-  Bundled MCP servers (auto-loaded by Claude):
-    - playwright        — browser automation
-    - context7          — up-to-date library docs lookup
-    - chrome-devtools   — Chrome DevTools Protocol
-    - github            — repo/PR/issue tools (uses your gh token)
+    \033[90m1.\033[0m Authenticate AI tools
+       \033[36mclaude login\033[0m
+       \033[36mcodex login\033[0m
 
-  For Laravel projects, add laravel-boost per-project:
-    composer require laravel/boost --dev
-    php artisan boost:install
-------------------------------------------------------------
-EOF
+    \033[90m2.\033[0m Authenticate GitHub
+       \033[36mgh auth login\033[0m
+
+    \033[90m3.\033[0m Start working
+       \033[36mai claude\033[0m
+       \033[36mai codex\033[0m
+
+    \033[90m4.\033[0m Review firewall rules
+       \033[36mcat /usr/local/bin/init-firewall.sh\033[0m
+
+
+  \033[1mBundled MCP servers\033[0m
+
+    \033[32m✓\033[0m playwright        Browser automation
+    \033[32m✓\033[0m context7          Fresh library docs
+    \033[32m✓\033[0m chrome-devtools   Chrome DevTools Protocol
+    \033[32m✓\033[0m github            Repo, PR, and issue tools
+
+
+  \033[1mLaravel Boost\033[0m
+
+    \033[36mcomposer require laravel/boost --dev\033[0m
+    \033[36mphp artisan boost:install\033[0m
+
+
+  \033[90mDisable sidecars with:\033[0m
+    --no-postgres  --no-redis  --no-sidecars
+
+BANNER
+)"
