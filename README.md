@@ -1,5 +1,9 @@
 # Docker Agent Runtime
 
+<p align="center">
+  <img src="readme-image.png" alt="Docker Agent Runtime — contain. control. execute." width="600">
+</p>
+
 A sandboxed Docker image that runs **Claude Code** and **Codex CLI** side-by-side, tuned for working on the `clever.hr` Laravel project (and similar Laravel/Node/Playwright stacks). Network egress is restricted to a curated allowlist; no host secrets are bind-mounted; named volumes keep agent logins, npm/composer caches, and Playwright browsers around between rebuilds.
 
 ## Prerequisites
