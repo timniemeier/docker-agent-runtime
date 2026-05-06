@@ -46,6 +46,26 @@ cd docker-agent-runtime
 
 `run.sh` builds the image on first invocation, names the container by a hash of the project path (so different repos don't collide), forwards your SSH agent socket if available, and drops you into `zsh` after the firewall initialises.
 
+#### Global `agent` alias
+
+To launch from anywhere without typing the full path, install the host-side `agent` alias once:
+
+```bash
+./scripts/install-host-alias.sh
+# pick a different name with: ALIAS_NAME=dar ./scripts/install-host-alias.sh
+exec $SHELL    # or: source ~/.zshrc
+```
+
+The installer detects your shell rc (`~/.zshrc`, `~/.bashrc`, `~/.bash_profile`), adds an idempotent block, and re-runs safely (it replaces the existing block instead of duplicating it, so moving the repo to a new path is one re-run away).
+
+After installation:
+
+```bash
+agent                                  # mount $PWD
+agent ~/projects/my-laravel-app        # auto-detects Laravel, starts sidecars
+agent --no-sidecars ~/projects/foo     # all the run.sh flags work
+```
+
 **Laravel auto-detect:** if the project directory contains an `artisan` file and a `composer.json` that requires `laravel/framework`, `run.sh` automatically starts postgres + redis sidecars. Override with `--no-postgres`, `--no-redis`, or `--no-sidecars`.
 
 **Sidecars:** `--with-postgres` (or `WITH_POSTGRES=1`) starts a `postgres:16-alpine` container on a project-scoped bridge network and connects the agent to it. Inside the container, postgres is reachable at `postgres:5432` with credentials `laravel/laravel/laravel`. The standard libpq env vars (`PGHOST`, `PGUSER`, …) and Laravel env vars (`DB_HOST`, `DB_CONNECTION=pgsql`, …) are auto-injected so `php artisan migrate`, `psql`, and `phpunit` work without further configuration. Data persists across restarts in an `agent-postgres-<hash>` named volume. `--with-redis` is the same idea for redis. `--with-laravel` is shorthand for both.
@@ -167,6 +187,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent firs
 ### 2026-05-05 (latest)
 
 **Added**
+- `scripts/install-host-alias.sh` — host-side installer that adds an idempotent `agent` alias (override with `ALIAS_NAME=…`) to `~/.zshrc` / `~/.bashrc` / `~/.bash_profile`. Re-running replaces the existing block in place, so moving the repo just needs one re-run.
 - Laravel auto-detect: when `run.sh` sees an `artisan` file and `laravel/framework` in `composer.json`, it now spins up postgres + redis sidecars by default. Override with `--no-postgres`, `--no-redis`, or `--no-sidecars`.
 - `run.sh --with-postgres`, `--with-redis`, `--with-laravel` — explicitly start sidecars on a project-scoped bridge network and connect the agent. Postgres is reachable at `postgres:5432` (creds `laravel/laravel/laravel`); redis at `redis:6379`. Standard libpq + Laravel env vars are auto-injected. Data persists in `agent-postgres-<hash>` / `agent-redis-<hash>` volumes.
 - Firewall auto-allows the agent's local bridge subnet (RFC1918) so traffic to sidecar IPs gets through the egress allowlist. Public-internet egress is unchanged.
