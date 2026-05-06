@@ -190,6 +190,82 @@ Adds a Postgres 16 container (user/db `laravel`, password `laravel`) and a Redis
 - **Firewall + corporate proxies:** if your network requires an HTTPS proxy, you'll need to allowlist the proxy CIDR and set `HTTPS_PROXY` inside the container.
 - **`--cap-add SYS_ADMIN`:** required for bubblewrap and for the iptables/ipset rules; this image is **not** suitable for running untrusted third-party code on shared hardware.
 
+## FAQ / Troubleshooting
+
+**Q: I edited a script but my changes aren't visible inside the container.**
+`run.sh` only builds the image when there is none. After changing anything in `Dockerfile`, `scripts/`, or `config/`, force a rebuild:
+```bash
+docker build -t agent-runtime:latest /Users/Tim/Documents/docker-agent-runtime
+```
+The `--rm` flag in `run.sh` already removes the container on exit, so the next `agent` invocation picks up the new image automatically.
+
+**Q: Powerlevel10k icons show as `[?]` in my terminal.**
+Install MesloLGS NF and select it as your terminal font. One-liner:
+```bash
+mkdir -p ~/Library/Fonts && cd ~/Library/Fonts && \
+  for s in Regular Bold Italic 'Bold Italic'; do \
+    curl -fLO "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20${s// /%20}.ttf"; \
+  done
+```
+Then in iTerm2 / Terminal.app / VS Code: Preferences → Profile / Font → "MesloLGS NF".
+
+**Q: `[firewall] warn: no A records resolved for ...` for every domain.**
+Docker Desktop's DNS forwarding has stalled. The runtime auto-falls back to `1.1.1.1` / `8.8.8.8` (added to `/etc/resolv.conf` if only `127.0.0.11` is present). If it still fails:
+```bash
+# inside the container
+cat /etc/resolv.conf
+dig @1.1.1.1 github.com
+```
+If `dig @1.1.1.1` fails, restart Docker Desktop (Quit → reopen) — the macOS network stack frequently wedges.
+
+**Q: `psql: Connection refused` on `127.0.0.1:5432`.**
+Postgres failed to come up. Diagnose:
+```bash
+sudo /usr/local/bin/start-services.sh    # re-run, watch the output
+sudo cat /var/log/postgresql/agent.log | tail -40
+```
+If `start-services` reports a partial / corrupt data dir from an earlier failed init:
+```bash
+exit
+docker volume rm $(docker volume ls -q --filter name='agent-pgdata-')
+agent ~/path/to/your/repo                 # fresh volume on next boot
+```
+
+**Q: `No space left on device` during build or inside the container.**
+Docker Desktop's VM disk is full. Reclaim:
+```bash
+docker rm -f $(docker ps -aq --filter name=agent-) 2>/dev/null
+docker container prune -f
+docker builder prune -a -f
+docker image prune -a -f
+docker system df            # verify
+```
+If still > 80% used, bump **Docker Desktop → Settings → Resources → Disk image size** to 100 GB+.
+
+**Q: Bundled MCPs (`context7`, `chrome-devtools`, `github`) don't show up in Claude.**
+You have an existing `agent-claude` volume from an earlier image; `post-create` doesn't overwrite an existing `~/.claude/settings.json`. Either re-seed (loses Claude login):
+```bash
+docker volume rm agent-claude
+```
+…or open `~/.claude/settings.json` inside the container and merge the `mcpServers` block from `/etc/agent-runtime/claude-settings.json` manually.
+
+**Q: `gh auth login` works on the host but the GitHub MCP says "no token".**
+The MCP wrapper reads from the container's `gh` CLI, which lives in the `agent-gh` named volume — separate from your host's `gh`. Run `gh auth login` *inside* the container once.
+
+**Q: Git is broken inside the container ("not a git repository") for a worktree.**
+The launcher auto-detects worktrees and mounts the parent repo. If you bypassed `run.sh` (e.g. used compose), pass the parent explicitly:
+```bash
+EXTRA_MOUNTS=/Users/you/path/to/main-repo ./run.sh /path/to/worktree
+```
+
+**Q: I want to bring my own postgres on a host port.**
+Disable the in-container service and reach the host:
+```bash
+WITH_POSTGRES=0 agent ~/your/repo
+# inside: connect to host.docker.internal:5432
+```
+You'll also need to add `host.docker.internal` to `scripts/init-firewall.sh` (or its IP).
+
 ## Changelog
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent first.
