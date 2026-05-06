@@ -41,6 +41,31 @@ preserve_docker_dns() {
     fi
 }
 
+# When the container is attached to a user-defined bridge (e.g. for the
+# Laravel sidecars), Docker writes ONLY `nameserver 127.0.0.11` into
+# /etc/resolv.conf and expects the embedded DNS daemon to forward
+# external queries upstream. On Docker Desktop / macOS that forwarding is
+# unreliable and frequently times out — every external lookup then fails
+# and the egress allowlist ends up empty.
+#
+# Mitigation: append public resolvers as fallback so glibc tries them
+# when 127.0.0.11 stalls. We keep 127.0.0.11 first because it's still
+# needed for sidecar service-name resolution (postgres, redis).
+ensure_dns_fallback() {
+    if ! grep -q '127\.0\.0\.11' /etc/resolv.conf; then
+        return 0
+    fi
+    if grep -q '^nameserver 1\.1\.1\.1\|^nameserver 8\.8\.8\.8' /etc/resolv.conf; then
+        return 0
+    fi
+    {
+        echo "nameserver 1.1.1.1"
+        echo "nameserver 8.8.8.8"
+        echo "options timeout:1 attempts:1"
+    } >> /etc/resolv.conf
+    log "appended public DNS fallback (1.1.1.1, 8.8.8.8) to /etc/resolv.conf"
+}
+
 flush_all() {
     # Flush filter and nat tables; reset built-in chain policies to ACCEPT
     # while we're rebuilding. We DROP again at the end.
@@ -268,10 +293,20 @@ validate() {
     # obvious in the post-start log. We only care that the TCP+TLS
     # handshake completes; HTTP 4xx on the bare host root is fine and
     # was previously misreported as "NOT reachable" because of `-f`.
+    # `curl -w '%{http_code}'` already emits "000" on connection / DNS
+    # failure, so the previous `|| echo 000` fallback double-printed
+    # ("000000") whenever curl exited non-zero. Capture and trim instead.
+    http_code() {
+        local url=$1
+        local out
+        out=$(curl --max-time 5 -sS -o /dev/null -w '%{http_code}' "$url" 2>/dev/null) || true
+        # Keep only the last 3 digits (curl always writes exactly 3).
+        printf '%s' "${out: -3}"
+    }
     probe() {
         local label=$1 url=$2
         local code
-        code=$(curl --max-time 5 -sS -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo 000)
+        code=$(http_code "$url")
         if [[ "$code" =~ ^[1-5][0-9][0-9]$ ]]; then
             log "ok: $label reachable (HTTP $code)"
         else
@@ -281,9 +316,9 @@ validate() {
     probe "api.anthropic.com" https://api.anthropic.com/
     probe "api.openai.com"    https://api.openai.com/
     # Negative control: a non-allowlisted host MUST be blocked. The
-    # firewall drops outbound, so curl will time out — `code` ends up 000.
+    # firewall drops outbound, so curl will time out — code stays "000".
     local control
-    control=$(curl --max-time 5 -sS -o /dev/null -w '%{http_code}' https://example.com 2>/dev/null || echo 000)
+    control=$(http_code https://example.com)
     if [[ "$control" == "000" ]]; then
         log "ok: control test (example.com) blocked"
     else
@@ -295,6 +330,7 @@ validate() {
 main() {
     require_root
     preserve_docker_dns
+    ensure_dns_fallback
     flush_all
     allow_baseline
     populate_allowlist
