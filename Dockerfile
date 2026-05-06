@@ -42,6 +42,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         bubblewrap \
         git \
         gh \
+        openssh-client \
         ripgrep \
         fd-find \
         bat \
@@ -75,6 +76,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # bubblewrap must be setuid for unprivileged user-namespace sandboxing.
 RUN chmod u+s /usr/bin/bwrap
+
+# Pre-seed github.com's SSH host keys so first-time git-over-ssh doesn't
+# stall on the unattended TTY prompt "Are you sure you want to continue
+# connecting (yes/no)?". The egress firewall isn't up at build time, so
+# ssh-keyscan reaches GitHub fine.
+RUN mkdir -p /etc/ssh \
+    && ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> /etc/ssh/ssh_known_hosts 2>/dev/null \
+    && chmod 0644 /etc/ssh/ssh_known_hosts
 
 # --- git-delta (pinned + checksum verified) ----------------------------------
 RUN ARCH=$(dpkg --print-architecture) && \
@@ -206,6 +215,11 @@ ENV CODEX_HOME=/home/${USERNAME}/.codex
 ENV SHELL=/bin/zsh
 ENV EDITOR=nano
 ENV DEVCONTAINER=true
+# Use a writable runtime gitconfig as the global config; it [include]'s the
+# read-only bind-mounted host gitconfig (see post-create.sh) so we still pick
+# up user.name/email/aliases without letting tools like `gh auth setup-git`
+# crash with "Device or resource busy" trying to write the host file.
+ENV GIT_CONFIG_GLOBAL=/home/${USERNAME}/.gitconfig-runtime
 
 # oh-my-zsh + powerlevel10k via zsh-in-docker. We pin the script's SHA-256 and
 # verify before piping to sh — same threat model as the git-delta install.

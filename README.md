@@ -258,6 +258,9 @@ The launcher auto-detects worktrees and mounts the parent repo. If you bypassed 
 EXTRA_MOUNTS=/Users/you/path/to/main-repo ./run.sh /path/to/worktree
 ```
 
+**Q: `git fetch` over SSH says "Host key verification failed" or HTTPS asks for a username.**
+The runtime now ships GitHub's SSH host keys pre-seeded in `/etc/ssh/ssh_known_hosts`, and `post-create.sh` runs `gh auth setup-git` automatically once you've done `gh auth login` — so both `git@github.com:…` and `https://github.com/…` should work after a single login. If you see `Device or resource busy` writing `/home/node/.gitconfig`, that's the host gitconfig bind-mounted read-only. The runtime works around it with `GIT_CONFIG_GLOBAL=/home/node/.gitconfig-runtime`, which `[include]`s the host config but is itself writable. If you customised your gitconfig before this fix shipped, rebuild the image and re-launch to pick it up.
+
 **Q: I want to bring my own postgres on a host port.**
 Disable the in-container service and reach the host:
 ```bash

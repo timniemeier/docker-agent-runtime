@@ -22,6 +22,27 @@ if [[ ! -f "$CODEX_DIR/config.toml" ]] && [[ -f /etc/agent-runtime/codex-config.
     cp /etc/agent-runtime/codex-config.toml "$CODEX_DIR/config.toml"
 fi
 
+# Writable runtime gitconfig (GIT_CONFIG_GLOBAL). It pulls in the user's
+# host-side ~/.gitconfig (which we bind-mount read-only at /home/node/
+# .gitconfig) so name/email/aliases still apply, but tools like
+# `gh auth setup-git` write *here* — the host file stays untouched.
+RUNTIME_GITCONFIG=$HOME/.gitconfig-runtime
+if [[ ! -f "$RUNTIME_GITCONFIG" ]]; then
+    {
+        if [[ -f "$HOME/.gitconfig" ]]; then
+            echo '[include]'
+            echo "    path = $HOME/.gitconfig"
+        fi
+    } > "$RUNTIME_GITCONFIG"
+fi
+
+# If gh is logged in, wire up the credential helper for HTTPS git
+# operations (git push / fetch over https://github.com/...). Idempotent:
+# gh writes a single credential.helper line, so re-running is fine.
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    gh auth setup-git >/dev/null 2>&1 || true
+fi
+
 # --- Welcome banner ---------------------------------------------------------
 # Builds a fixed-width box (60 cols inner) whose middle rows reflect the
 # actual project shape and which services run.sh decided to start. Falls
