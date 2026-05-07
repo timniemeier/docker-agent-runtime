@@ -126,12 +126,23 @@ if [[ "${AUTO_WORKTREE_MOUNT:-1}" == "1" ]] && [[ -f "$PROJECT_DIR/.git" ]]; the
 fi
 
 IMAGE_TAG="agent-runtime:latest"
+GHCR_IMAGE="ghcr.io/timniemeier/agent-runtime:latest"
 
-# Build only when no image exists yet — force a rebuild via `docker build`
-# directly when needed.
+# When the local image is missing, try pulling from GHCR first — a published
+# release shaves first-launch time from ~3 min build to ~30 sec download. Tag
+# the pulled image as agent-runtime:latest so downstream code (compose,
+# devcontainer, this script's run command) keeps using the same name. Force a
+# rebuild by deleting the local tag and re-running, or by `docker build`ing
+# directly. AGENT_FORCE_BUILD=1 skips the pull and builds locally — useful for
+# testing Dockerfile changes against an unreleased commit.
 if ! docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
-    echo "[run.sh] building $IMAGE_TAG (one-time)"
-    docker build -t "$IMAGE_TAG" "$SCRIPT_DIR"
+    if [[ "${AGENT_FORCE_BUILD:-0}" != "1" ]] && docker pull "$GHCR_IMAGE" 2>/dev/null; then
+        echo "[run.sh] pulled $GHCR_IMAGE → tagging as $IMAGE_TAG"
+        docker tag "$GHCR_IMAGE" "$IMAGE_TAG"
+    else
+        echo "[run.sh] no published image found (or AGENT_FORCE_BUILD=1) — building $IMAGE_TAG locally (one-time)"
+        docker build -t "$IMAGE_TAG" "$SCRIPT_DIR"
+    fi
 fi
 
 # Per-project container name keeps caches isolated and lets multiple
