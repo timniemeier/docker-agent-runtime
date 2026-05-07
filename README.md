@@ -46,6 +46,7 @@ cd docker-agent-runtime
 ./run.sh --no-sidecars /path/to/repo           # skip auto-started sidecars
 ./run.sh --with-postgres /path/to/repo         # force postgres on for non-Laravel
 ./run.sh --with-laravel  /path/to/repo         # force both sidecars on
+./run.sh --resume /path/to/repo                # import host Claude/Codex sessions
 ```
 
 `run.sh` builds the image on first invocation, names the container by a hash of the project path (so different repos don't collide), forwards your SSH agent socket if available, and drops you into `zsh` after the firewall initialises.
@@ -257,6 +258,13 @@ The launcher auto-detects worktrees and mounts the parent repo. If you bypassed 
 ```bash
 EXTRA_MOUNTS=/Users/you/path/to/main-repo ./run.sh /path/to/worktree
 ```
+
+**Q: Can I resume a Claude / Codex session I started on the host inside the container?**
+Yes — launch with `--resume`:
+```bash
+agent --resume ~/Documents/clever-hr-worktrees/golive-mvp
+```
+`run.sh` bind-mounts your host's `~/.claude/projects` and `~/.codex/sessions` read-only, and `post-create.sh` copies the matching project's Claude transcripts (with the path key remapped from the host's absolute path to `/workspace`) plus all Codex sessions into the container's session store on first start. Then `claude --resume` (or `claude -c` for "continue most recent") and `codex --resume` list them. Import is one-way — new messages added inside the container don't sync back to the host's files. Re-running is safe (cp `-n` no-clobber leaves existing container-side sessions alone).
 
 **Q: How do I tell at a glance whether I'm inside the runtime or on the host?**
 Inside the container the runtime adds three visual markers that don't exist on the host:

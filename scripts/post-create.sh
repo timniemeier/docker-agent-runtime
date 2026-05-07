@@ -43,6 +43,40 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
     gh auth setup-git >/dev/null 2>&1 || true
 fi
 
+# --resume: import Claude/Codex session transcripts the host saved before
+# this container started. Run.sh bind-mounts the host's session dirs at
+# /host-claude-projects and /host-codex-sessions read-only when --resume
+# is on. We copy them into the container's writable session store, with
+# Claude's path key remapped from the host project path to /workspace
+# (Claude keys session dirs by encoded cwd: slashes → dashes).
+if [[ "${RESUME_HOST:-0}" == "1" ]] && [[ -n "${RESUME_HOST_PROJECT_PATH:-}" ]]; then
+    host_project="${RESUME_HOST_PROJECT_PATH}"
+    host_key="${host_project//\//-}"           # /Users/Tim/foo → -Users-Tim-foo
+    container_key="-workspace"
+
+    src="/host-claude-projects/${host_key}"
+    dst="$CLAUDE_DIR/projects/${container_key}"
+    if [[ -d "$src" ]]; then
+        mkdir -p "$dst"
+        # `-n` = no-clobber: existing container-side sessions take precedence
+        # over the imported host snapshot. Re-running is safe.
+        if cp -rn "$src/." "$dst/" 2>/dev/null; then
+            count=$(find "$dst" -maxdepth 1 -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
+            echo "[post-create] imported ${count} Claude session(s) from host (key ${host_key} → ${container_key})"
+        fi
+    fi
+
+    # Codex stores sessions by UUID under ~/.codex/sessions, project-agnostic,
+    # so a flat merge does the right thing.
+    if [[ -d /host-codex-sessions ]]; then
+        mkdir -p "$CODEX_DIR/sessions"
+        if cp -rn /host-codex-sessions/. "$CODEX_DIR/sessions/" 2>/dev/null; then
+            count=$(find "$CODEX_DIR/sessions" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')
+            echo "[post-create] imported Codex session store (${count} files total)"
+        fi
+    fi
+fi
+
 # --- Welcome banner ---------------------------------------------------------
 # Builds a fixed-width box (60 cols inner) whose middle rows reflect the
 # actual project shape and which services run.sh decided to start. Falls

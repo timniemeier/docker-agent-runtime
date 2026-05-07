@@ -13,6 +13,7 @@
 #   AUTO_WORKTREE_MOUNT=0   Disable auto-mount of a worktree's parent repo
 #   WITH_POSTGRES=1         Same as --with-postgres
 #   WITH_REDIS=1            Also start a redis sidecar at redis:6379
+#   RESUME_HOST=1           Same as --resume — import host Claude/Codex sessions
 set -euo pipefail
 IFS=$'\n\t'
 
@@ -21,6 +22,7 @@ IFS=$'\n\t'
 # project looks like a Laravel app. Explicit flags override the auto-detect.
 WITH_POSTGRES=${WITH_POSTGRES:-auto}
 WITH_REDIS=${WITH_REDIS:-auto}
+RESUME_HOST=${RESUME_HOST:-0}
 _args=()
 for arg in "$@"; do
     case "$arg" in
@@ -30,6 +32,7 @@ for arg in "$@"; do
         --no-postgres)   WITH_POSTGRES=0 ;;
         --no-redis)      WITH_REDIS=0 ;;
         --no-sidecars)   WITH_POSTGRES=0; WITH_REDIS=0 ;;
+        --resume)        RESUME_HOST=1 ;;
         *) _args+=("$arg") ;;
     esac
 done
@@ -219,6 +222,24 @@ fi
 
 if [[ -f "$HOME/.gitconfig" ]]; then
     VOLS+=(-v "$HOME/.gitconfig:/home/node/.gitconfig:ro")
+fi
+
+# --resume: forward the host's Claude / Codex session stores (read-only) so
+# post-create.sh can copy the matching project's transcripts into the
+# container's session dirs. One-way import — new messages added inside the
+# container stay inside.
+if [[ "$RESUME_HOST" == "1" ]]; then
+    if [[ -d "$HOME/.claude/projects" ]]; then
+        VOLS+=(-v "$HOME/.claude/projects:/host-claude-projects:ro")
+    fi
+    if [[ -d "$HOME/.codex/sessions" ]]; then
+        VOLS+=(-v "$HOME/.codex/sessions:/host-codex-sessions:ro")
+    fi
+    ENVS+=(
+        -e "RESUME_HOST=1"
+        -e "RESUME_HOST_PROJECT_PATH=$PROJECT_DIR"
+    )
+    echo "[run.sh] --resume on: importing host Claude/Codex sessions for $PROJECT_DIR" >&2
 fi
 
 # Optional extra bind mounts for cases like git worktrees, where the project
