@@ -253,6 +253,7 @@ fi
 
 exec docker run -it --rm \
     --name "$CONTAINER_NAME" \
+    --hostname agent-runtime \
     --init \
     "${CAPS[@]}" \
     "${DNS_FLAGS[@]}" \

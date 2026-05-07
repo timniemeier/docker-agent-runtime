@@ -258,6 +258,13 @@ The launcher auto-detects worktrees and mounts the parent repo. If you bypassed 
 EXTRA_MOUNTS=/Users/you/path/to/main-repo ./run.sh /path/to/worktree
 ```
 
+**Q: How do I tell at a glance whether I'm inside the runtime or on the host?**
+Inside the container the runtime adds three visual markers that don't exist on the host:
+- A red **🐳 RUNTIME** segment on the left of the powerlevel10k prompt.
+- The window/tab title is prefixed with **🐳 Agent Runtime — `<cwd>`**.
+- iTerm2 shows an **AGENT RUNTIME** badge overlaid in the pane corner.
+- The container's hostname is `agent-runtime`, so `prompt %m` / `whoami@host` differs from your laptop's hostname.
+
 **Q: My terminal is mangled — every keypress shows `c9;1:3u` or similar gibberish.**
 A TUI process (usually `ai claude` or `ai codex`) exited without popping the kitty keyboard protocol off the terminal stack. New shells in the runtime now pop the stack defensively on startup, so opening a fresh iTerm tab (or any new container) clears it. To unstick the *current* shell without closing the tab, paste this and hit Enter:
 

@@ -170,6 +170,7 @@ RUN echo "${USERNAME} ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" \
 
 # --- Copy scripts and config templates ---------------------------------------
 COPY scripts/agent-output.sh    /usr/local/lib/agent-output.sh
+COPY scripts/agent-prompt.zsh   /usr/local/lib/agent-prompt.zsh
 COPY scripts/init-firewall.sh   /usr/local/bin/init-firewall.sh
 COPY scripts/post-create.sh     /usr/local/bin/post-create.sh
 COPY scripts/post-start.sh      /usr/local/bin/post-start.sh
@@ -247,6 +248,8 @@ RUN curl -fsSL -o /tmp/zsh-in-docker.sh \
         -a '# input buffer, making the next shell unusable. This is a no-op when' \
         -a '# the stack is already empty.' \
         -a '[[ -t 1 ]] && printf "\\e[<u" 2>/dev/null' \
+        -a '# Visual marker: prompt segment, window title, iTerm2 badge.' \
+        -a '[[ -f /usr/local/lib/agent-prompt.zsh ]] && source /usr/local/lib/agent-prompt.zsh' \
         -x && \
     rm /tmp/zsh-in-docker.sh
 
