@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gh \
         openssh-client \
         ripgrep \
+        rsync \
         fd-find \
         bat \
         jq \
@@ -171,12 +172,14 @@ RUN echo "${USERNAME} ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" \
 # --- Copy scripts and config templates ---------------------------------------
 COPY scripts/agent-output.sh    /usr/local/lib/agent-output.sh
 COPY scripts/agent-prompt.zsh   /usr/local/lib/agent-prompt.zsh
+COPY scripts/agent-export.sh    /usr/local/lib/agent-export.sh
 COPY scripts/init-firewall.sh   /usr/local/bin/init-firewall.sh
 COPY scripts/post-create.sh     /usr/local/bin/post-create.sh
 COPY scripts/post-start.sh      /usr/local/bin/post-start.sh
 COPY scripts/start-services.sh  /usr/local/bin/start-services.sh
 COPY scripts/ai                 /usr/local/bin/ai
 COPY scripts/mcp-github         /usr/local/bin/mcp-github
+COPY scripts/agent-export       /usr/local/bin/agent-export
 COPY scripts/entrypoint.sh      /usr/local/bin/entrypoint.sh
 COPY config/claude-settings.json /etc/agent-runtime/claude-settings.json
 COPY config/codex-config.toml    /etc/agent-runtime/codex-config.toml
@@ -197,6 +200,7 @@ RUN chown root:root /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh
         /usr/local/bin/start-services.sh \
         /usr/local/bin/ai \
         /usr/local/bin/mcp-github \
+        /usr/local/bin/agent-export \
         /usr/local/bin/entrypoint.sh
 
 # --- Playwright browsers (chromium only) -------------------------------------
