@@ -4,7 +4,7 @@
   <img src="readme-image.png" alt="Docker Agent Runtime — contain. control. execute." width="600">
 </p>
 
-A sandboxed Docker image that runs **Claude Code** and **Codex CLI** side-by-side, tuned for working on the `clever.hr` Laravel project (and similar Laravel/Node/Playwright stacks). Network egress is restricted to a curated allowlist; no host secrets are bind-mounted; named volumes keep agent logins, npm/composer caches, and Playwright browsers around between rebuilds.
+A sandboxed Docker image that runs **Claude Code** and **Codex CLI** side-by-side, tuned for Laravel / Node / Playwright stacks (auto-detects Laravel projects and brings up postgres + redis on loopback). Network egress is restricted to a curated allowlist; no host secrets are bind-mounted; named volumes keep agent logins, npm/composer caches, and Playwright browsers around between rebuilds.
 
 ## Prerequisites
 
@@ -81,7 +81,7 @@ agent --no-sidecars ~/projects/foo     # all the run.sh flags work
 Postgres data persists across restarts in an `agent-pgdata-<hash>` named volume. Two roles are seeded: `postgres`/`postgres` (superuser, classic CI default) and `laravel`/`laravel` (Laravel skeleton default). To create extra databases (e.g. a project-specific test DB):
 
 ```bash
-psql -h 127.0.0.1 -U postgres -c 'CREATE DATABASE clever_hr_testing;'
+psql -h 127.0.0.1 -U postgres -c 'CREATE DATABASE myapp_testing;'
 ```
 
 ## Authentication
@@ -275,7 +275,7 @@ It picks the most recently active host Claude project, runs the container non-in
 **Q: Can I resume a Claude / Codex session I started on the host inside the container?**
 Yes — launch with `--resume`:
 ```bash
-agent --resume ~/Documents/clever-hr-worktrees/golive-mvp
+agent --resume ~/projects/my-laravel-app
 ```
 `run.sh` bind-mounts your host's `~/.claude/projects` and `~/.codex/sessions` read-only and copies the matching project's transcripts into the container's session store on first start. Then `claude --resume` (or `claude -c` for continue-most-recent) and `codex --resume` list them.
 
