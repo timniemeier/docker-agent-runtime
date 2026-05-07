@@ -254,6 +254,51 @@ _pick_new_branch_name() {
     printf -v "$result_var" '%s' "$chosen_branch"
 }
 
+# Prompt after the launched container exits and optionally remove the worktree
+# created/selected by maybe_prompt_worktree during this same run.sh session.
+maybe_prompt_remove_launched_worktree() {
+    [[ "${AGENT_LAUNCHER_WORKTREE:-0}" == "1" ]] || return 0
+
+    # Match the launch prompt: non-interactive callers should never block.
+    [[ -t 0 ]] || return 0
+
+    local repo_root="${AGENT_WORKTREE_REPO_ROOT:-}"
+    local wt_dir="${AGENT_WORKTREE_DIR:-}"
+    local branch="${AGENT_WORKTREE_BRANCH:-}"
+
+    [[ -n "$repo_root" && -n "$wt_dir" ]] || return 0
+    [[ -e "$wt_dir" ]] || return 0
+
+    local ans
+    read -r -p "  Remove worktree $wt_dir${branch:+ (branch: $branch)}? [y/N]: " ans </dev/tty || return 0
+    ans=$(printf '%s' "$ans" | tr '[:upper:]' '[:lower:]')
+    case "$ans" in
+        y|yes) ;;
+        *) return 0 ;;
+    esac
+
+    local dirty=""
+    dirty=$(git -C "$wt_dir" status --porcelain 2>/dev/null || true)
+    if [[ -n "$dirty" ]]; then
+        echo "  worktree has uncommitted or untracked changes:" >&2
+        git -C "$wt_dir" status --short >&2 || true
+
+        local force_ans
+        read -r -p "  Force remove dirty worktree? This discards those changes. [y/N]: " force_ans </dev/tty || return 0
+        force_ans=$(printf '%s' "$force_ans" | tr '[:upper:]' '[:lower:]')
+        case "$force_ans" in
+            y|yes)
+                git -C "$repo_root" worktree remove --force "$wt_dir" \
+                    || echo "  warn: failed to remove worktree: $wt_dir" >&2
+                ;;
+            *) return 0 ;;
+        esac
+    else
+        git -C "$repo_root" worktree remove "$wt_dir" \
+            || echo "  warn: failed to remove worktree: $wt_dir" >&2
+    fi
+}
+
 # Main entry. Mutates PROJECT_DIR in caller scope iff the user opts in.
 maybe_prompt_worktree() {
     # Skip silently when not inside a git work tree.
@@ -326,6 +371,10 @@ maybe_prompt_worktree() {
     fi
 
     PROJECT_DIR="$wt_dir"
+    AGENT_LAUNCHER_WORKTREE=1
+    AGENT_WORKTREE_REPO_ROOT="$repo_root"
+    AGENT_WORKTREE_DIR="$wt_dir"
+    AGENT_WORKTREE_BRANCH="$branch"
     export PROJECT_DIR
     echo "[run.sh] worktree ready → $wt_dir (branch: $branch)" >&2
 }

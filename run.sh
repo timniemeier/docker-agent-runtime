@@ -365,10 +365,18 @@ if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
     # restart — re-run init-firewall.sh as root before handing the user a
     # shell, otherwise the reused container has no egress allowlist at all.
     docker exec --user root "$CONTAINER_NAME" /usr/local/bin/init-firewall.sh
-    exec docker exec -it "$CONTAINER_NAME" zsh
+    if docker exec -it "$CONTAINER_NAME" zsh; then
+        _agent_shell_status=0
+    else
+        _agent_shell_status=$?
+    fi
+    if declare -F maybe_prompt_remove_launched_worktree >/dev/null; then
+        maybe_prompt_remove_launched_worktree || true
+    fi
+    exit "$_agent_shell_status"
 fi
 
-exec docker run -it --rm \
+if docker run -it --rm \
     --name "$CONTAINER_NAME" \
     --hostname agent-runtime \
     --init \
@@ -380,4 +388,12 @@ exec docker run -it --rm \
     "${VOLS[@]}" \
     -w /workspace \
     "$IMAGE_TAG" \
-    zsh
+    zsh; then
+    _agent_shell_status=0
+else
+    _agent_shell_status=$?
+fi
+if declare -F maybe_prompt_remove_launched_worktree >/dev/null; then
+    maybe_prompt_remove_launched_worktree || true
+fi
+exit "$_agent_shell_status"
