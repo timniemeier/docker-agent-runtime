@@ -47,6 +47,7 @@ cd docker-agent-runtime
 ./run.sh --with-postgres /path/to/repo         # force postgres on for non-Laravel
 ./run.sh --with-laravel  /path/to/repo         # force both sidecars on
 ./run.sh --resume /path/to/repo                # import host Claude/Codex sessions
+./run.sh --help                                # full flag list
 ```
 
 `run.sh` builds the image on first invocation, names the container by a hash of the project path (so different repos don't collide), forwards your SSH agent socket if available, and drops you into `zsh` after the firewall initialises.
@@ -258,6 +259,13 @@ The launcher auto-detects worktrees and mounts the parent repo. If you bypassed 
 ```bash
 EXTRA_MOUNTS=/Users/you/path/to/main-repo ./run.sh /path/to/worktree
 ```
+
+**Q: Is `--resume` actually working?**
+Run the included smoke test from the runtime repo root on the host:
+```bash
+./scripts/smoke-test-resume.sh
+```
+It picks the most recently active host Claude project, runs the container non-interactively with `--resume`, and asserts that every host JSONL UUID lands in the container's `~/.claude/projects/-workspace/`. Exits 0 on pass.
 
 **Q: Can I resume a Claude / Codex session I started on the host inside the container?**
 Yes — launch with `--resume`:

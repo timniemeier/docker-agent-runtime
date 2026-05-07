@@ -17,6 +17,40 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+usage() {
+    cat <<'EOF'
+Usage: agent [OPTIONS] [PROJECT_PATH]
+
+Launch a sandboxed Docker runtime that mounts PROJECT_PATH (default: $PWD)
+at /workspace and drops you into zsh with Claude Code + Codex CLI ready.
+
+Options:
+  --with-postgres       Start postgres on 127.0.0.1:5432 (auto-on for Laravel)
+  --with-redis          Start redis on 127.0.0.1:6379 (auto-on for Laravel)
+  --with-laravel        Both postgres and redis
+  --no-postgres         Force postgres off
+  --no-redis            Force redis off
+  --no-sidecars         Force both off
+  --resume              Import host Claude/Codex sessions for the project
+                        (one-way, host files stay read-only)
+  -h, --help            Show this help and exit
+
+Env knobs (override the flags above):
+  EXTRA_MOUNTS=path[,path...]   Extra bind mounts (same path host→container,
+                                or host:container[:ro] explicit)
+  AUTO_WORKTREE_MOUNT=0         Disable git-worktree parent-repo auto-mount
+  RESUME_HOST=1                 Same as --resume
+
+Examples:
+  agent                                  # mount $PWD
+  agent ~/projects/myrepo                # mount that path
+  agent --resume ~/projects/laravel      # also import host sessions
+  agent --no-sidecars ~/projects/foo     # bare runtime, no DB
+
+Inside the container, run `ai help` for Claude/Codex launchers.
+EOF
+}
+
 # Argument parsing — pull recognised flags out before treating remaining args
 # as a project path. Sidecars default to "auto" and get enabled below if the
 # project looks like a Laravel app. Explicit flags override the auto-detect.
@@ -33,6 +67,7 @@ for arg in "$@"; do
         --no-redis)      WITH_REDIS=0 ;;
         --no-sidecars)   WITH_POSTGRES=0; WITH_REDIS=0 ;;
         --resume)        RESUME_HOST=1 ;;
+        -h|--help)       usage; exit 0 ;;
         *) _args+=("$arg") ;;
     esac
 done
