@@ -320,7 +320,15 @@ You'll also need to add `host.docker.internal` to `scripts/init-firewall.sh` (or
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent first.
 
-### 2026-05-05 (latest)
+### 2026-05-07 (latest)
+
+**Added**
+- `run.sh` / `agent` now prompts on bare invocations from inside a git repo: `Create a new worktree for an issue? [y/N]`. On opt-in, it fetches the issue title via `gh issue view`, slugifies it into `<num>-<slug>`, lets you pick or create a base branch, runs `git worktree add ./.worktrees/<branch>`, and mounts the new worktree at `/workspace`. Skipped on non-TTY, when an explicit project path is passed, or under `--no-worktree-prompt` / `WORKTREE_PROMPT=0`. (#11)
+
+**Fixed**
+- `run.sh` no longer treats no-arg invocations as a single empty positional. Previously `set -- "${_args[@]:-}"` collapsed an empty parsed-args array to `""`, making `$#` always ≥ 1 — the new bootstrap branches on `${#_args[@]}` before that collapse. (#11)
+
+### 2026-05-05
 
 **Changed**
 - Postgres + Redis now run **inside** the agent container on `127.0.0.1` instead of as separate sidecar containers on a custom bridge network. The bridge approach kept tripping over Docker Desktop's embedded DNS (service-name resolution stalled intermittently on macOS). Loopback is reliable, matches CI, and removes a whole class of "postgres unreachable" failures. New volume name: `agent-pgdata-<hash>` (was `agent-postgres-<hash>` — the old volumes are unreadable by the in-container postgres because the prior sidecar used `postgres:16-alpine` while bookworm ships PG 15; `docker volume rm` the old ones).
