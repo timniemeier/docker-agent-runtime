@@ -1,0 +1,45 @@
+# Build the runtime image on tag push (v*) and publish to GHCR.
+#
+# Single-arch (linux/arm64) for v1.0 — Apple Silicon dev only, see
+# README "Known limitations". Add linux/amd64 to `platforms` once a Linux
+# contributor needs it.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # QEMU lets the amd64 GitHub runner emulate arm64 for the build.
+      # Slower than a native arm runner but free, and v1.0 only ships one arch.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ${GITHUB_REF_NAME} is the tag (e.g. v1.0.0). Tag both the version
+      # and :latest so `run.sh`'s pull path always finds something.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ghcr.io/timniemeier/agent-runtime:${{ github.ref_name }}
+            ghcr.io/timniemeier/agent-runtime:latest
