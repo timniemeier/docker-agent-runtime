@@ -51,7 +51,7 @@ cd docker-agent-runtime
 ./run.sh --help                                # full flag list
 ```
 
-**Worktree prompt on bare invocation.** When you run `./run.sh` (or `agent`) with **no project path** from inside a git repo, the launcher first asks `Create a new worktree for an issue? [y/N]`. Pick `y`, give an issue number, and it fetches the title via `gh issue view`, slugifies it into a branch like `42-fix-login-redirect`, lets you choose a base branch (or type a custom one / fork from the repo default), creates the branch if missing, and runs `git worktree add ./.worktrees/<branch>` — then mounts that worktree at `/workspace`. Add `.worktrees/` to `.gitignore`. Skip the prompt with `--no-worktree-prompt` or `WORKTREE_PROMPT=0`. Passing an explicit project path also bypasses the prompt.
+**Worktree prompt on bare invocation.** When you run `./run.sh` (or `agent`) with **no project path** from inside a git repo, the launcher first asks `Create a new worktree for an issue? [y/N]`. Pick `y` and it opens an arrow-key selector with `[create new branch]` plus all remote branches from `origin`. Selecting an existing branch checks it out into `./.worktrees/<branch>` and mounts that worktree at `/workspace`. Selecting `[create new branch]` opens an issue selector from `gh issue list`; picking an issue creates a branch like `42-fix-login-redirect`, while `[Enter custom branch name]` lets you type the branch manually. Add `.worktrees/` to `.gitignore`. Skip the prompt with `--no-worktree-prompt` or `WORKTREE_PROMPT=0`. Passing an explicit project path also bypasses the prompt.
 
 On first invocation `run.sh` tries `docker pull ghcr.io/timniemeier/agent-runtime:latest` (~30 sec on a normal connection) and falls back to a local `docker build` (~3 min on M1) only if the pull fails or `AGENT_FORCE_BUILD=1` is set. The pulled image is re-tagged as `agent-runtime:latest` so subsequent launches reuse it. Container names are a hash of the project path (so different repos don't collide), the SSH agent socket is forwarded if available, and you land in `zsh` after the firewall initialises.
 
@@ -323,7 +323,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent firs
 ### 2026-05-07 (latest)
 
 **Added**
-- `run.sh` / `agent` now prompts on bare invocations from inside a git repo: `Create a new worktree for an issue? [y/N]`. On opt-in, it fetches the issue title via `gh issue view`, slugifies it into `<num>-<slug>`, lets you pick or create a base branch, runs `git worktree add ./.worktrees/<branch>`, and mounts the new worktree at `/workspace`. Skipped on non-TTY, when an explicit project path is passed, or under `--no-worktree-prompt` / `WORKTREE_PROMPT=0`. (#11)
+- `run.sh` / `agent` now prompts on bare invocations from inside a git repo: `Create a new worktree for an issue? [y/N]`. On opt-in, it opens an arrow-key selector with `[create new branch]` and all remote branches from `origin`; existing branches are checked out into `./.worktrees/<branch>`, while new branches are created from either a selected open GitHub issue (`<num>-<slug>`) or a manually entered branch name. Skipped on non-TTY, when an explicit project path is passed, or under `--no-worktree-prompt` / `WORKTREE_PROMPT=0`. (#11)
 
 **Fixed**
 - `run.sh` no longer treats no-arg invocations as a single empty positional. Previously `set -- "${_args[@]:-}"` collapsed an empty parsed-args array to `""`, making `$#` always ≥ 1 — the new bootstrap branches on `${#_args[@]}` before that collapse. (#11)

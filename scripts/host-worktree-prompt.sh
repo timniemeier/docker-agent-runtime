@@ -2,21 +2,13 @@
 # host-worktree-prompt.sh — host-side bootstrap prompt for run.sh.
 #
 # Sourced by run.sh when invoked with no PROJECT_PATH from inside a git
-# repo. Asks the user whether to spin up a fresh worktree for an issue,
-# then creates the branch (if missing) and the worktree under
+# repo. Asks the user whether to spin up a fresh worktree, then either
+# checks out an existing remote branch or creates a branch for an issue under
 # ./.worktrees/<branch>, exporting PROJECT_DIR so the rest of run.sh
 # mounts the new worktree at /workspace.
 #
 # Pure host-side. Targets bash 3.2 (macOS default) — no mapfile, no
 # associative arrays, no ${var,,}.
-
-# Try `gh issue view <NUM>` and echo the title. Returns non-zero on any
-# failure (gh missing, not authed, issue not found, network error).
-_gh_issue_title() {
-    local num="$1"
-    command -v gh >/dev/null 2>&1 || return 1
-    gh issue view "$num" --json title -q .title 2>/dev/null
-}
 
 # Slugify stdin → stdout. Lowercase, non-alnum runs collapse to '-',
 # trim leading/trailing '-'.
@@ -27,6 +19,10 @@ _slugify() {
 
 _branch_exists() {
     git show-ref --verify --quiet "refs/heads/$1"
+}
+
+_remote_branch_exists() {
+    git show-ref --verify --quiet "refs/remotes/origin/$1"
 }
 
 # Echo the repo's default branch (e.g. main / master). Falls back to
@@ -62,47 +58,200 @@ _prompt() {
     printf -v "$varname" '%s' "$input"
 }
 
-# Bash select over branches + custom + new-from-default. Echoes the
-# resolved base branch name (must already exist by the time we return).
-_pick_base_branch() {
-    local default_branch="$1"
-    local branches=()
-    local b
-    while IFS= read -r b; do
-        [[ -n "$b" ]] && branches+=("$b")
-    done < <(git branch --format='%(refname:short)')
+_remote_branches() {
+    git ls-remote --heads origin 2>/dev/null \
+        | sed -E 's#^[[:xdigit:]]+[[:space:]]+refs/heads/##' \
+        | LC_ALL=C sort
+}
 
-    echo "  Pick base branch (default: $default_branch):" >&2
-    local opt picked=""
-    PS3="  > "
-    select opt in "${branches[@]}" "<type a custom name>" "<use default: $default_branch>"; do
-        case "$opt" in
-            "")
-                continue
+_open_issues() {
+    command -v gh >/dev/null 2>&1 || return 1
+    gh issue list --state open --limit 1000 --json number,title \
+        --jq '.[] | [.number, .title] | @tsv' 2>/dev/null
+}
+
+_clear_menu() {
+    local lines="$1"
+    while [[ "$lines" -gt 0 ]]; do
+        printf '\033[1A\r\033[2K' >/dev/tty
+        lines=$((lines - 1))
+    done
+}
+
+_tty_cols() {
+    local _rows cols
+    if read -r _rows cols < <(stty size </dev/tty 2>/dev/null) && [[ -n "$cols" ]]; then
+        echo "$cols"
+    else
+        echo 80
+    fi
+}
+
+_fit_menu_label() {
+    local label="$1" cols="$2"
+    local max_width=$((cols - 6))
+
+    [[ "$max_width" -lt 10 ]] && max_width=10
+    if [[ "${#label}" -gt "$max_width" ]]; then
+        printf '%.*s...' $((max_width - 3)) "$label"
+    else
+        printf '%s' "$label"
+    fi
+}
+
+# Arrow-key selector for host TTYs. Args: prompt, result-index-var, options...
+_select_index() {
+    local prompt="$1" result_var="$2"
+    shift 2
+
+    local options=("$@")
+    local total="${#options[@]}"
+    local selected=0 drawn=0 old_stty=""
+    local height="${WORKTREE_PROMPT_MENU_HEIGHT:-15}"
+    local cols start end row label display_label key second third
+
+    [[ "$total" -gt 0 ]] || return 1
+    [[ "$height" =~ ^[0-9]+$ ]] || height=15
+    [[ "$height" -lt 3 ]] && height=3
+    [[ "$height" -gt "$total" ]] && height="$total"
+
+    old_stty=$(stty -g </dev/tty) || return 1
+    stty -echo -icanon min 1 time 0 </dev/tty || return 1
+    printf '\033[?25l' >/dev/tty
+
+    while :; do
+        [[ "$drawn" -gt 0 ]] && _clear_menu "$drawn"
+        cols=$(_tty_cols)
+
+        start=$((selected - height / 2))
+        [[ "$start" -lt 0 ]] && start=0
+        if [[ $((start + height)) -gt "$total" ]]; then
+            start=$((total - height))
+        fi
+        [[ "$start" -lt 0 ]] && start=0
+        end=$((start + height - 1))
+        [[ "$end" -ge "$total" ]] && end=$((total - 1))
+
+        printf '  %s\n' "$prompt" >/dev/tty
+        drawn=1
+
+        if [[ "$start" -gt 0 ]]; then
+            printf '    ... %s more above\n' "$start" >/dev/tty
+            drawn=$((drawn + 1))
+        fi
+
+        row="$start"
+        while [[ "$row" -le "$end" ]]; do
+            label="${options[$row]}"
+            display_label=$(_fit_menu_label "$label" "$cols")
+            if [[ "$row" -eq "$selected" ]]; then
+                printf '  \033[7m> %s\033[0m\n' "$display_label" >/dev/tty
+            else
+                printf '    %s\n' "$display_label" >/dev/tty
+            fi
+            drawn=$((drawn + 1))
+            row=$((row + 1))
+        done
+
+        if [[ "$end" -lt $((total - 1)) ]]; then
+            printf '    ... %s more below\n' $((total - end - 1)) >/dev/tty
+            drawn=$((drawn + 1))
+        fi
+
+        IFS= read -r -s -n 1 key </dev/tty || {
+            stty "$old_stty" </dev/tty
+            printf '\033[?25h' >/dev/tty
+            return 1
+        }
+        case "$key" in
+            ""|$'\r'|$'\n')
+                _clear_menu "$drawn"
+                stty "$old_stty" </dev/tty
+                printf '\033[?25h' >/dev/tty
+                printf -v "$result_var" '%s' "$selected"
+                return 0
                 ;;
-            "<type a custom name>")
-                local custom
-                _prompt "Base branch name" custom
-                if _branch_exists "$custom"; then
-                    picked="$custom"
-                else
-                    echo "  branch '$custom' doesn't exist locally — will be created from $default_branch" >&2
-                    git branch "$custom" "$default_branch" >&2
-                    picked="$custom"
-                fi
-                break
+            $'\003')
+                _clear_menu "$drawn"
+                stty "$old_stty" </dev/tty
+                printf '\033[?25h' >/dev/tty
+                return 130
                 ;;
-            "<use default: $default_branch>")
-                picked="$default_branch"
-                break
+            $'\033')
+                second=""
+                third=""
+                stty -echo -icanon min 0 time 2 </dev/tty
+                IFS= read -r -s -n 1 second </dev/tty || true
+                IFS= read -r -s -n 1 third </dev/tty || true
+                stty -echo -icanon min 1 time 0 </dev/tty
+                case "$second$third" in
+                    "[A"|"OA") selected=$((selected - 1)) ;;
+                    "[B"|"OB") selected=$((selected + 1)) ;;
+                esac
                 ;;
-            *)
-                picked="$opt"
-                break
+            k)
+                selected=$((selected - 1))
+                ;;
+            j)
+                selected=$((selected + 1))
                 ;;
         esac
-    done </dev/tty
-    echo "$picked"
+
+        [[ "$selected" -lt 0 ]] && selected=$((total - 1))
+        [[ "$selected" -ge "$total" ]] && selected=0
+    done
+}
+
+_pick_branch_action() {
+    local result_var="$1"
+    local options=("[create new branch]")
+    local branch idx
+
+    while IFS= read -r branch; do
+        [[ -n "$branch" ]] && options+=("$branch")
+    done < <(_remote_branches)
+
+    if [[ "${#options[@]}" -eq 1 ]]; then
+        echo "  no remote branches found on origin — aborting worktree creation" >&2
+        return 1
+    fi
+
+    _select_index "Select branch for the new worktree:" idx "${options[@]}" || return 1
+    printf -v "$result_var" '%s' "${options[$idx]}"
+}
+
+_pick_new_branch_name() {
+    local result_var="$1"
+    local options=("[Enter custom branch name]")
+    local issue_numbers=("")
+    local issue_titles=("")
+    local issues num title idx slug chosen_branch
+
+    if issues=$(_open_issues); then
+        if [[ -n "$issues" ]]; then
+            while IFS=$'\t' read -r num title; do
+                [[ -n "$num" && -n "$title" ]] || continue
+                issue_numbers+=("$num")
+                issue_titles+=("$title")
+                options+=("#$num $title")
+            done <<< "$issues"
+        fi
+    else
+        echo "  gh issue list failed (not installed / not authed / no remote issues)" >&2
+    fi
+
+    _select_index "Select issue for the new branch:" idx "${options[@]}" || return 1
+    if [[ "$idx" -eq 0 ]]; then
+        _prompt "Branch name" chosen_branch
+    else
+        num="${issue_numbers[$idx]}"
+        title="${issue_titles[$idx]}"
+        slug=$(printf '%s' "$title" | _slugify)
+        chosen_branch="${num}-${slug}"
+        echo "  gh: '#$num $title' -> branch '$chosen_branch'" >&2
+    fi
+
+    printf -v "$result_var" '%s' "$chosen_branch"
 }
 
 # Main entry. Mutates PROJECT_DIR in caller scope iff the user opts in.
@@ -125,42 +274,22 @@ maybe_prompt_worktree() {
         *) return 0 ;;
     esac
 
-    local issue_num
-    while :; do
-        _prompt "Issue #" issue_num
-        [[ "$issue_num" =~ ^[0-9]+$ ]] && break
-        echo "  not a number — try again" >&2
-    done
-
-    # Branch name — try gh, fall back to manual.
-    local title slug branch
-    if title=$(_gh_issue_title "$issue_num") && [[ -n "$title" ]]; then
-        slug=$(printf '%s' "$title" | _slugify)
-        branch="${issue_num}-${slug}"
-        echo "  gh: '$title' → branch '$branch'" >&2
-        local override
-        _prompt "Branch name" override "$branch"
-        branch="$override"
+    local action branch create_new=0
+    _pick_branch_action action || return 0
+    if [[ "$action" == "[create new branch]" ]]; then
+        create_new=1
+        _pick_new_branch_name branch || return 0
     else
-        echo "  gh issue lookup failed (not installed / not authed / no such issue)" >&2
-        _prompt "Branch name" branch "issue-${issue_num}"
+        branch="$action"
+    fi
+
+    if [[ -z "$branch" ]]; then
+        echo "  branch name is empty — aborting" >&2
+        return 1
     fi
 
     local default_branch
     default_branch=$(_default_branch)
-
-    # Decide base branch only if the target branch doesn't already exist.
-    # If it does exist, base is irrelevant — we just attach a worktree to it.
-    local base=""
-    if ! _branch_exists "$branch"; then
-        base=$(_pick_base_branch "$default_branch")
-        if ! _branch_exists "$base"; then
-            echo "  base branch '$base' still missing — aborting" >&2
-            return 1
-        fi
-    else
-        echo "  branch '$branch' already exists — re-using it for the worktree" >&2
-    fi
 
     local wt_dir="$repo_root/.worktrees/$branch"
     if [[ -e "$wt_dir" ]]; then
@@ -169,12 +298,25 @@ maybe_prompt_worktree() {
         return 1
     fi
 
-    mkdir -p "$repo_root/.worktrees"
+    mkdir -p "$(dirname "$wt_dir")"
 
-    if _branch_exists "$branch"; then
-        git -C "$repo_root" worktree add "$wt_dir" "$branch"
+    if [[ "$create_new" == "1" ]]; then
+        local base="$default_branch"
+        if ! _branch_exists "$default_branch"; then
+            git -C "$repo_root" fetch origin "$default_branch:refs/remotes/origin/$default_branch" || return 1
+            base="origin/$default_branch"
+        fi
+        git -C "$repo_root" worktree add -b "$branch" "$wt_dir" "$base" || return 1
+    elif _branch_exists "$branch"; then
+        echo "  branch '$branch' already exists locally — re-using it for the worktree" >&2
+        git -C "$repo_root" worktree add "$wt_dir" "$branch" || return 1
     else
-        git -C "$repo_root" worktree add -b "$branch" "$wt_dir" "$base"
+        git -C "$repo_root" fetch origin "$branch:refs/remotes/origin/$branch" || return 1
+        if ! _remote_branch_exists "$branch"; then
+            echo "  remote branch 'origin/$branch' missing after fetch — aborting" >&2
+            return 1
+        fi
+        git -C "$repo_root" worktree add --track -b "$branch" "$wt_dir" "origin/$branch" || return 1
     fi
 
     # Suggest .gitignore hygiene without auto-editing the user's repo.

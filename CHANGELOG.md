@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent firs
 ## [Unreleased]
 
 **Added**
-- Host-side worktree prompt on bare `./run.sh` / `agent` invocations. From inside a git repo with an interactive TTY, the launcher asks `Create a new worktree for an issue?`; on opt-in it fetches the issue title via `gh issue view`, slugifies it into `<num>-<slug>`, lets the user pick or create a base branch, runs `git worktree add ./.worktrees/<branch>`, and uses the new worktree as `PROJECT_DIR`. Skipped on non-TTY, when an explicit project path is passed, or under `--no-worktree-prompt` / `WORKTREE_PROMPT=0`. New module: `scripts/host-worktree-prompt.sh`. (#11)
+- Host-side worktree prompt on bare `./run.sh` / `agent` invocations. From inside a git repo with an interactive TTY, the launcher asks `Create a new worktree for an issue?`; on opt-in it opens an arrow-key selector with `[create new branch]` and all remote branches from `origin`. Existing remote branches are checked out into `./.worktrees/<branch>`; new branches are created from either a selected open GitHub issue (`<num>-<slug>`) or a manually entered branch name. Skipped on non-TTY, when an explicit project path is passed, or under `--no-worktree-prompt` / `WORKTREE_PROMPT=0`. New module: `scripts/host-worktree-prompt.sh`. (#11)
 
 **Fixed**
 - `run.sh` previously collapsed an empty positional-args array to a single empty string via `set -- "${_args[@]:-}"`, so any downstream `[[ $# -eq 0 ]]` check was broken. The new worktree-prompt path branches on `${#_args[@]}` *before* the destructive collapse; the collapse itself is preserved for compatibility with the rest of the script. (#11)
