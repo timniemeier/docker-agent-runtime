@@ -3,20 +3,34 @@
   "defaultMode": "default",
   "mcpServers": {
     "playwright": {
+      "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest"]
+      "args": ["-y", "@playwright/mcp@latest"],
+      "env": {}
     },
     "context7": {
+      "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp@latest"]
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "env": {}
     },
     "chrome-devtools": {
+      "type": "stdio",
       "command": "npx",
-      "args": ["-y", "chrome-devtools-mcp@latest", "--isolated", "--headless"]
+      "args": ["-y", "chrome-devtools-mcp@latest", "--isolated", "--headless"],
+      "env": {}
     },
     "github": {
+      "type": "stdio",
       "command": "/usr/local/bin/mcp-github",
-      "args": []
+      "args": [],
+      "env": {}
+    },
+    "laravel-boost": {
+      "type": "stdio",
+      "command": "/usr/bin/php",
+      "args": ["artisan", "boost:mcp"],
+      "env": {}
     }
   }
 }
