@@ -54,15 +54,30 @@ if [[ "${RESUME_HOST:-0}" == "1" ]] && [[ -n "${RESUME_HOST_PROJECT_PATH:-}" ]];
     host_key="${host_project//\//-}"           # /Users/Tim/foo → -Users-Tim-foo
     container_key="-workspace"
 
-    src="/host-claude-projects/${host_key}"
     dst="$CLAUDE_DIR/projects/${container_key}"
-    if [[ -d "$src" ]]; then
-        mkdir -p "$dst"
-        # `-n` = no-clobber: existing container-side sessions take precedence
-        # over the imported host snapshot. Re-running is safe.
-        if cp -rn "$src/." "$dst/" 2>/dev/null; then
-            count=$(find "$dst" -maxdepth 1 -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
-            echo "[post-create] imported ${count} Claude session(s) from host (key ${host_key} → ${container_key})"
+    mkdir -p "$dst"
+
+    # Two-layer import. First the export tree (writes from the previous
+    # container's lifetime — most recent appended turns), then the
+    # pristine host tree (untouched user history). cp -n means the
+    # export wins on UUID collision, so a session continued in the
+    # previous container picks up where it left off rather than reverting
+    # to the host's older copy.
+    src_export="/host-claude-export/${host_key}"
+    if [[ -d "$src_export" ]]; then
+        cp -rn "$src_export/." "$dst/" 2>/dev/null || true
+        count=$(find "$dst" -maxdepth 1 -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
+        echo "[post-create] imported ${count} Claude session(s) from export tree (key ${host_key})"
+    fi
+
+    src_pristine="/host-claude-projects/${host_key}"
+    if [[ -d "$src_pristine" ]]; then
+        before=$(find "$dst" -maxdepth 1 -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
+        cp -rn "$src_pristine/." "$dst/" 2>/dev/null || true
+        after=$(find "$dst" -maxdepth 1 -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
+        added=$((after - before))
+        if (( added > 0 )); then
+            echo "[post-create] imported ${added} additional Claude session(s) from host pristine tree"
         fi
     fi
 

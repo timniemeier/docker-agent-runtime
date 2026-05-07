@@ -50,7 +50,9 @@ cd docker-agent-runtime
 ./run.sh --help                                # full flag list
 ```
 
-`run.sh` builds the image on first invocation, names the container by a hash of the project path (so different repos don't collide), forwards your SSH agent socket if available, and drops you into `zsh` after the firewall initialises.
+On first invocation `run.sh` tries `docker pull ghcr.io/timniemeier/agent-runtime:latest` (~30 sec on a normal connection) and falls back to a local `docker build` (~3 min on M1) only if the pull fails or `AGENT_FORCE_BUILD=1` is set. The pulled image is re-tagged as `agent-runtime:latest` so subsequent launches reuse it. Container names are a hash of the project path (so different repos don't collide), the SSH agent socket is forwarded if available, and you land in `zsh` after the firewall initialises.
+
+> Published image is `linux/arm64` only for v1.0 (Apple Silicon dev). On `linux/amd64` the pull will fail and `run.sh` falls through to a local build — see `CHANGELOG.md`.
 
 #### Global `agent` alias
 
@@ -195,8 +197,11 @@ Adds a Postgres 16 container (user/db `laravel`, password `laravel`) and a Redis
 ## FAQ / Troubleshooting
 
 **Q: I edited a script but my changes aren't visible inside the container.**
-`run.sh` only builds the image when there is none. After changing anything in `Dockerfile`, `scripts/`, or `config/`, force a rebuild:
+`run.sh` only builds the image when there is none — and it'll prefer pulling from GHCR over building. After changing anything in `Dockerfile`, `scripts/`, or `config/`, force a local rebuild:
 ```bash
+docker rmi agent-runtime:latest
+AGENT_FORCE_BUILD=1 ./run.sh         # or just `docker build` directly
+# or, scripted:
 docker build -t agent-runtime:latest /Users/Tim/Documents/docker-agent-runtime
 ```
 The `--rm` flag in `run.sh` already removes the container on exit, so the next `agent` invocation picks up the new image automatically.
@@ -272,7 +277,16 @@ Yes — launch with `--resume`:
 ```bash
 agent --resume ~/Documents/clever-hr-worktrees/golive-mvp
 ```
-`run.sh` bind-mounts your host's `~/.claude/projects` and `~/.codex/sessions` read-only, and `post-create.sh` copies the matching project's Claude transcripts (with the path key remapped from the host's absolute path to `/workspace`) plus all Codex sessions into the container's session store on first start. Then `claude --resume` (or `claude -c` for "continue most recent") and `codex --resume` list them. Import is one-way — new messages added inside the container don't sync back to the host's files. Re-running is safe (cp `-n` no-clobber leaves existing container-side sessions alone).
+`run.sh` bind-mounts your host's `~/.claude/projects` and `~/.codex/sessions` read-only and copies the matching project's transcripts into the container's session store on first start. Then `claude --resume` (or `claude -c` for continue-most-recent) and `codex --resume` list them.
+
+**Q: I rebuilt the runtime image / dropped the agent-claude volume. How do I keep my running conversation?**
+`--resume` also turns on an **export** half: the container's session writes are mirrored back to `~/.claude-runtime-export/projects/<encoded-project-path>/` on the host (a separate tree from your real `~/.claude` — your real Claude history stays read-only). A zsh `precmd` hook syncs after each command (throttled to ~30 s), and the same sync runs on shell exit. Manual flush before destroying the container:
+```bash
+agent-export   # inside the container, forces an immediate rsync
+```
+On the next `agent --resume`, `post-create.sh` imports from the export tree first (most-recent appended turns), then fills in anything missing from the host's pristine tree. Net: `claude --resume` shows the conversation right where you left it, even after `docker volume rm agent-claude` and a full rebuild.
+
+Disable the export half with `agent --resume --no-export <project>` if you only want import (host's `~/.claude-runtime-export/` stays empty, container writes don't escape).
 
 **Q: How do I tell at a glance whether I'm inside the runtime or on the host?**
 Inside the container the runtime adds three visual markers that don't exist on the host:

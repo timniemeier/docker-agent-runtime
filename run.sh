@@ -32,7 +32,11 @@ Options:
   --no-redis            Force redis off
   --no-sidecars         Force both off
   --resume              Import host Claude/Codex sessions for the project
-                        (one-way, host files stay read-only)
+                        AND mirror in-container session writes back to
+                        ~/.claude-runtime-export/projects/ on the host so
+                        conversations survive container destroy/rebuild.
+                        Host's real ~/.claude tree stays read-only.
+  --no-export           Disable the export half of --resume (import only).
   -h, --help            Show this help and exit
 
 Env knobs (override the flags above):
@@ -57,6 +61,9 @@ EOF
 WITH_POSTGRES=${WITH_POSTGRES:-auto}
 WITH_REDIS=${WITH_REDIS:-auto}
 RESUME_HOST=${RESUME_HOST:-0}
+# Export defaults to "paired" — auto-on whenever --resume is on. --no-export
+# splits the pair so you can import without writing back to the host.
+EXPORT_HOST=${EXPORT_HOST:-auto}
 _args=()
 for arg in "$@"; do
     case "$arg" in
@@ -67,6 +74,7 @@ for arg in "$@"; do
         --no-redis)      WITH_REDIS=0 ;;
         --no-sidecars)   WITH_POSTGRES=0; WITH_REDIS=0 ;;
         --resume)        RESUME_HOST=1 ;;
+        --no-export)     EXPORT_HOST=0 ;;
         -h|--help)       usage; exit 0 ;;
         *) _args+=("$arg") ;;
     esac
@@ -126,12 +134,23 @@ if [[ "${AUTO_WORKTREE_MOUNT:-1}" == "1" ]] && [[ -f "$PROJECT_DIR/.git" ]]; the
 fi
 
 IMAGE_TAG="agent-runtime:latest"
+GHCR_IMAGE="ghcr.io/timniemeier/agent-runtime:latest"
 
-# Build only when no image exists yet — force a rebuild via `docker build`
-# directly when needed.
+# When the local image is missing, try pulling from GHCR first — a published
+# release shaves first-launch time from ~3 min build to ~30 sec download. Tag
+# the pulled image as agent-runtime:latest so downstream code (compose,
+# devcontainer, this script's run command) keeps using the same name. Force a
+# rebuild by deleting the local tag and re-running, or by `docker build`ing
+# directly. AGENT_FORCE_BUILD=1 skips the pull and builds locally — useful for
+# testing Dockerfile changes against an unreleased commit.
 if ! docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
-    echo "[run.sh] building $IMAGE_TAG (one-time)"
-    docker build -t "$IMAGE_TAG" "$SCRIPT_DIR"
+    if [[ "${AGENT_FORCE_BUILD:-0}" != "1" ]] && docker pull "$GHCR_IMAGE" 2>/dev/null; then
+        echo "[run.sh] pulled $GHCR_IMAGE → tagging as $IMAGE_TAG"
+        docker tag "$GHCR_IMAGE" "$IMAGE_TAG"
+    else
+        echo "[run.sh] no published image found (or AGENT_FORCE_BUILD=1) — building $IMAGE_TAG locally (one-time)"
+        docker build -t "$IMAGE_TAG" "$SCRIPT_DIR"
+    fi
 fi
 
 # Per-project container name keeps caches isolated and lets multiple
@@ -259,10 +278,19 @@ if [[ -f "$HOME/.gitconfig" ]]; then
     VOLS+=(-v "$HOME/.gitconfig:/home/node/.gitconfig:ro")
 fi
 
+# Resolve EXPORT_HOST=auto → on when --resume is on, off otherwise.
+[[ "$EXPORT_HOST" == "auto" ]] && EXPORT_HOST=$RESUME_HOST
+
 # --resume: forward the host's Claude / Codex session stores (read-only) so
 # post-create.sh can copy the matching project's transcripts into the
-# container's session dirs. One-way import — new messages added inside the
-# container stay inside.
+# container's session dirs.
+#
+# Pairing: --resume also enables export-on-write (unless --no-export). The
+# export tree lives at $HOME/.claude-runtime-export/projects (a separate
+# location from the user's real ~/.claude/projects, which stays untouched).
+# A zsh precmd hook + zshexit + manual `agent-export` keep it in sync, so
+# in-container conversations survive container destroy / `docker volume rm
+# agent-claude` and can be re-imported by the next --resume launch.
 if [[ "$RESUME_HOST" == "1" ]]; then
     if [[ -d "$HOME/.claude/projects" ]]; then
         VOLS+=(-v "$HOME/.claude/projects:/host-claude-projects:ro")
@@ -275,6 +303,20 @@ if [[ "$RESUME_HOST" == "1" ]]; then
         -e "RESUME_HOST_PROJECT_PATH=$PROJECT_DIR"
     )
     echo "[run.sh] --resume on: importing host Claude/Codex sessions for $PROJECT_DIR" >&2
+fi
+
+if [[ "$EXPORT_HOST" == "1" ]]; then
+    EXPORT_DIR="$HOME/.claude-runtime-export/projects"
+    mkdir -p "$EXPORT_DIR"
+    VOLS+=(-v "$EXPORT_DIR:/host-claude-export:rw")
+    # RESUME_HOST_PROJECT_PATH may already be set by --resume above; export
+    # needs it too (to derive the host-side dir name). Set defensively in
+    # case --no-export-paired-with-resume edge cases come up later.
+    ENVS+=(
+        -e "EXPORT_HOST=1"
+        -e "RESUME_HOST_PROJECT_PATH=$PROJECT_DIR"
+    )
+    echo "[run.sh] --export on: container session writes mirror to $EXPORT_DIR/" >&2
 fi
 
 # Optional extra bind mounts for cases like git worktrees, where the project
