@@ -47,8 +47,11 @@ cd docker-agent-runtime
 ./run.sh --with-postgres /path/to/repo         # force postgres on for non-Laravel
 ./run.sh --with-laravel  /path/to/repo         # force both sidecars on
 ./run.sh --resume /path/to/repo                # import host Claude/Codex sessions
+./run.sh --no-worktree-prompt                  # skip the issue/worktree prompt
 ./run.sh --help                                # full flag list
 ```
+
+**Worktree prompt on bare invocation.** When you run `./run.sh` (or `agent`) with **no project path** from inside a git repo, the launcher first asks `Create a new worktree for an issue? [y/N]`. Pick `y`, give an issue number, and it fetches the title via `gh issue view`, slugifies it into a branch like `42-fix-login-redirect`, lets you choose a base branch (or type a custom one / fork from the repo default), creates the branch if missing, and runs `git worktree add ./.worktrees/<branch>` — then mounts that worktree at `/workspace`. Add `.worktrees/` to `.gitignore`. Skip the prompt with `--no-worktree-prompt` or `WORKTREE_PROMPT=0`. Passing an explicit project path also bypasses the prompt.
 
 On first invocation `run.sh` tries `docker pull ghcr.io/timniemeier/agent-runtime:latest` (~30 sec on a normal connection) and falls back to a local `docker build` (~3 min on M1) only if the pull fails or `AGENT_FORCE_BUILD=1` is set. The pulled image is re-tagged as `agent-runtime:latest` so subsequent launches reuse it. Container names are a hash of the project path (so different repos don't collide), the SSH agent socket is forwarded if available, and you land in `zsh` after the firewall initialises.
 

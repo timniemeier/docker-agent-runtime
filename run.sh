@@ -37,6 +37,8 @@ Options:
                         conversations survive container destroy/rebuild.
                         Host's real ~/.claude tree stays read-only.
   --no-export           Disable the export half of --resume (import only).
+  --no-worktree-prompt  Skip the "create worktree for an issue?" prompt
+                        on bare invocations. Same as WORKTREE_PROMPT=0.
   -h, --help            Show this help and exit
 
 Env knobs (override the flags above):
@@ -44,6 +46,7 @@ Env knobs (override the flags above):
                                 or host:container[:ro] explicit)
   AUTO_WORKTREE_MOUNT=0         Disable git-worktree parent-repo auto-mount
   RESUME_HOST=1                 Same as --resume
+  WORKTREE_PROMPT=0             Same as --no-worktree-prompt
 
 Examples:
   agent                                  # mount $PWD
@@ -75,10 +78,27 @@ for arg in "$@"; do
         --no-sidecars)   WITH_POSTGRES=0; WITH_REDIS=0 ;;
         --resume)        RESUME_HOST=1 ;;
         --no-export)     EXPORT_HOST=0 ;;
+        --no-worktree-prompt) WORKTREE_PROMPT=0 ;;
         -h|--help)       usage; exit 0 ;;
         *) _args+=("$arg") ;;
     esac
 done
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+# Host-side worktree bootstrap. When invoked with no project arg from inside
+# a git repo and an interactive TTY, optionally create a fresh worktree for
+# an issue and use it as PROJECT_DIR. Skipped under --no-worktree-prompt /
+# WORKTREE_PROMPT=0. The function exports PROJECT_DIR if the user opts in;
+# otherwise it leaves PROJECT_DIR unset and the fallback below picks $PWD.
+# Run this *before* the destructive `set --` below, which collapses an
+# empty array to a single empty positional and would mask the no-arg case.
+if [[ ${#_args[@]} -eq 0 ]] && [[ "${WORKTREE_PROMPT:-1}" == "1" ]]; then
+    # shellcheck source=scripts/host-worktree-prompt.sh
+    source "$SCRIPT_DIR/scripts/host-worktree-prompt.sh"
+    maybe_prompt_worktree
+fi
+
 set -- "${_args[@]:-}"
 
 # Fail fast if Docker isn't running — otherwise downstream `docker` calls block
@@ -88,8 +108,7 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-PROJECT_DIR=${1:-${PWD}}
+PROJECT_DIR=${PROJECT_DIR:-${1:-${PWD}}}
 PROJECT_DIR=$(cd "$PROJECT_DIR" && pwd)
 
 # Auto-detect Laravel: presence of artisan + composer.json with
