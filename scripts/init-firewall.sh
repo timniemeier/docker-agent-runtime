@@ -242,16 +242,18 @@ populate_allowlist() {
     # Bulk GitHub IP blocks (web/api/git).
     add_github_meta
 
-    # User extension point: any space-separated list provided in
-    # OPENAI_ALLOWED_DOMAINS at runtime gets appended. This matches the
-    # convention from openai/codex's secure profile.
-    if [[ -n "${OPENAI_ALLOWED_DOMAINS:-}" ]]; then
-        for d in $OPENAI_ALLOWED_DOMAINS; do
+    # User extension point: any space-separated list provided at runtime
+    # gets appended. OPENAI_ALLOWED_DOMAINS keeps compatibility with the
+    # Codex secure-profile convention; AGENT_ALLOWED_DOMAINS is the neutral
+    # runtime alias for non-OpenAI services such as Hugging Face.
+    local extra_domains="${OPENAI_ALLOWED_DOMAINS:-} ${AGENT_ALLOWED_DOMAINS:-}"
+    if [[ -n "${extra_domains// /}" ]]; then
+        for d in $extra_domains; do
             if [[ "$d" =~ ^[a-zA-Z0-9._-]+$ ]]; then
                 log_info "Extra allowlist domain: $d"
                 add_domain "$d"
             else
-                log_warn "Skipping invalid domain in OPENAI_ALLOWED_DOMAINS: $d"
+                log_warn "Skipping invalid domain in extra allowlist: $d"
             fi
         done
     fi

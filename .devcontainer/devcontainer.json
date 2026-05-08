@@ -31,6 +31,7 @@
     "source=agent-composer-${devcontainerId},target=/home/node/.composer,type=volume",
     "source=agent-pip-${devcontainerId},target=/home/node/.cache/pip,type=volume",
     "source=agent-playwright-${devcontainerId},target=/home/node/.cache/ms-playwright,type=volume",
+    "source=agent-huggingface-${devcontainerId},target=/home/node/.cache/huggingface,type=volume",
     "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly"
   ],
   "containerEnv": {
@@ -43,6 +44,11 @@
   "remoteEnv": {
     "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}",
     "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}",
+    "HF_TOKEN": "${localEnv:HF_TOKEN}",
+    "HUGGINGFACE_HUB_TOKEN": "${localEnv:HUGGINGFACE_HUB_TOKEN}",
+    "HUGGING_FACE_HUB_TOKEN": "${localEnv:HUGGING_FACE_HUB_TOKEN}",
+    "OPENAI_ALLOWED_DOMAINS": "${localEnv:OPENAI_ALLOWED_DOMAINS}",
+    "AGENT_ALLOWED_DOMAINS": "${localEnv:AGENT_ALLOWED_DOMAINS}",
     "SSH_AUTH_SOCK": "/ssh-agent"
   },
   "postCreateCommand": "/usr/local/bin/post-create.sh",

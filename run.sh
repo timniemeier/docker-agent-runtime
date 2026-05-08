@@ -44,6 +44,8 @@ Options:
 Env knobs (override the flags above):
   EXTRA_MOUNTS=path[,path...]   Extra bind mounts (same path host→container,
                                 or host:container[:ro] explicit)
+  AGENT_ALLOWED_DOMAINS="..."   Extra firewall allowlist domains
+                                (also accepts OPENAI_ALLOWED_DOMAINS)
   AUTO_WORKTREE_MOUNT=0         Disable git-worktree parent-repo auto-mount
   RESUME_HOST=1                 Same as --resume
   WORKTREE_PROMPT=0             Same as --no-worktree-prompt
@@ -225,6 +227,21 @@ fi
 if [[ -n "${OPENAI_API_KEY:-}" ]]; then
     ENVS+=(-e "OPENAI_API_KEY=$OPENAI_API_KEY")
 fi
+if [[ -n "${OPENAI_ALLOWED_DOMAINS:-}" ]]; then
+    ENVS+=(-e "OPENAI_ALLOWED_DOMAINS=$OPENAI_ALLOWED_DOMAINS")
+fi
+if [[ -n "${AGENT_ALLOWED_DOMAINS:-}" ]]; then
+    ENVS+=(-e "AGENT_ALLOWED_DOMAINS=$AGENT_ALLOWED_DOMAINS")
+fi
+if [[ -n "${HF_TOKEN:-}" ]]; then
+    ENVS+=(-e "HF_TOKEN=$HF_TOKEN")
+fi
+if [[ -n "${HUGGINGFACE_HUB_TOKEN:-}" ]]; then
+    ENVS+=(-e "HUGGINGFACE_HUB_TOKEN=$HUGGINGFACE_HUB_TOKEN")
+fi
+if [[ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]]; then
+    ENVS+=(-e "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN")
+fi
 ENVS+=(
     -e "TZ=Europe/Berlin"
     -e "AGENT_PROJECT_DIR=$PROJECT_DIR"
@@ -291,6 +308,7 @@ VOLS=(
     -v "agent-composer:/home/node/.composer"
     -v "agent-pip:/home/node/.cache/pip"
     -v "agent-playwright:/home/node/.cache/ms-playwright"
+    -v "agent-huggingface:/home/node/.cache/huggingface"
 )
 
 if [[ -n "$PG_VOL" ]]; then
@@ -299,6 +317,10 @@ fi
 
 if [[ -f "$HOME/.gitconfig" ]]; then
     VOLS+=(-v "$HOME/.gitconfig:/home/node/.gitconfig:ro")
+fi
+
+if [[ -f "$HOME/.claude/CLAUDE.md" ]]; then
+    VOLS+=(-v "$HOME/.claude/CLAUDE.md:/host-claude-md/CLAUDE.md:ro")
 fi
 
 # Resolve EXPORT_HOST=auto → on when --resume is on, off otherwise.
@@ -368,8 +390,8 @@ if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
     # iptables/ipset rules are wiped on container stop and don't survive a
     # restart — re-run init-firewall.sh as root before handing the user a
     # shell, otherwise the reused container has no egress allowlist at all.
-    docker exec --user root "$CONTAINER_NAME" /usr/local/bin/init-firewall.sh
-    if docker exec -it "$CONTAINER_NAME" zsh; then
+    docker exec --user root "${ENVS[@]}" "$CONTAINER_NAME" /usr/local/bin/init-firewall.sh
+    if docker exec -it "${ENVS[@]}" "$CONTAINER_NAME" zsh; then
         _agent_shell_status=0
     else
         _agent_shell_status=$?

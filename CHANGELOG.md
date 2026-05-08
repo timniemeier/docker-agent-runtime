@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent firs
 ## [Unreleased]
 
 **Added**
+- Extra firewall domains are now forwarded from `run.sh` via `AGENT_ALLOWED_DOMAINS` / `OPENAI_ALLOWED_DOMAINS`; Hugging Face token env vars and a persistent `agent-huggingface` cache volume are wired across launcher, Compose, and devcontainer entry points.
+- `run.sh` now imports host `~/.claude/CLAUDE.md` into the container's Claude config on startup when present.
 - Laravel projects now bootstrap Laravel Boost automatically during container startup, with `AGENT_AUTO_LARAVEL_BOOST=0` as an opt-out.
 - Launcher-created worktrees now symlink `.env` from the main worktree when present, avoiding missing-env failures in hooks and tests.
 - Runtime shell prompt context line showing the current git worktree and branch in both zsh and bash.

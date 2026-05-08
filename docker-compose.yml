@@ -30,9 +30,15 @@ services:
       - agent-composer:/home/node/.composer
       - agent-pip:/home/node/.cache/pip
       - agent-playwright:/home/node/.cache/ms-playwright
+      - agent-huggingface:/home/node/.cache/huggingface
     environment:
       - ANTHROPIC_API_KEY
       - OPENAI_API_KEY
+      - HF_TOKEN
+      - HUGGINGFACE_HUB_TOKEN
+      - HUGGING_FACE_HUB_TOKEN
+      - OPENAI_ALLOWED_DOMAINS
+      - AGENT_ALLOWED_DOMAINS
       - TZ=Europe/Berlin
       - CLAUDE_CONFIG_DIR=/home/node/.claude
       - CODEX_HOME=/home/node/.codex
@@ -72,4 +78,5 @@ volumes:
   agent-composer:
   agent-pip:
   agent-playwright:
+  agent-huggingface:
   agent-postgres:

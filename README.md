@@ -183,6 +183,8 @@ gh auth login         # GitHub CLI (lives in /home/node/.config/gh volume)
 
 You can also export `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` on the host; both are forwarded into the container and override interactive login.
 
+If `~/.claude/CLAUDE.md` exists on the host, `run.sh` mounts it read-only and `post-create.sh` copies it into the container's `~/.claude/CLAUDE.md` on startup. Edit the host file and start a fresh runtime shell to refresh the container copy.
+
 ## The `ai` launcher
 
 Single entry point with sensible defaults, plus YOLO toggles when you want them:
@@ -229,8 +231,18 @@ These are known security gaps that are **deliberately not fixed** in v1. Each is
 Edit `scripts/init-firewall.sh` and rebuild. The list is grouped by purpose (Anthropic, OpenAI, NPM, Composer, PyPI, Crates, Playwright, custom deploy target, VSCode, GitHub) so it's easy to add or comment-out a domain. You can also pass extra domains at runtime without rebuilding:
 
 ```bash
-docker run -e OPENAI_ALLOWED_DOMAINS="example.com fly.io" ... agent-runtime:latest
+AGENT_ALLOWED_DOMAINS="example.com fly.io" ./run.sh /path/to/repo
 ```
+
+`OPENAI_ALLOWED_DOMAINS` is still accepted for compatibility with Codex's secure-profile convention. For Hugging Face model downloads, pass the required domains and token from the host:
+
+```bash
+AGENT_ALLOWED_DOMAINS="huggingface.co cdn-lfs.huggingface.co hf.co cas-bridge.xethub.hf.co transfer.xethub.hf.co cas-server.xethub.hf.co" \
+HF_TOKEN=hf_... \
+./run.sh /path/to/repo
+```
+
+The one-shot launcher, Compose file, and devcontainer forward `HF_TOKEN`, `HUGGINGFACE_HUB_TOKEN`, and `HUGGING_FACE_HUB_TOKEN`. Hugging Face downloads are cached in the `agent-huggingface` Docker volume at `/home/node/.cache/huggingface`.
 
 ## Bundled MCP Servers
 
