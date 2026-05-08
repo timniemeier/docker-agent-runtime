@@ -5,6 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent firs
 ## [Unreleased]
 
 **Added**
+- Laravel projects now bootstrap Laravel Boost automatically during container startup, with `AGENT_AUTO_LARAVEL_BOOST=0` as an opt-out.
 - Launcher-created worktrees now symlink `.env` from the main worktree when present, avoiding missing-env failures in hooks and tests.
 - Runtime shell prompt context line showing the current git worktree and branch in both zsh and bash.
 - Exit cleanup prompt for worktrees launched via the bare `./run.sh` / `agent` worktree prompt. When the container shell exits, the host asks whether to run `git worktree remove`; dirty worktrees print `git status --short` and require a second confirmation before `--force` is used.

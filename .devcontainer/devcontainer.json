@@ -37,6 +37,7 @@
     "NODE_OPTIONS": "--max-old-space-size=4096",
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "CODEX_HOME": "/home/node/.codex",
+    "AGENT_AUTO_LARAVEL_BOOST": "${localEnv:AGENT_AUTO_LARAVEL_BOOST}",
     "TZ": "Europe/Berlin"
   },
   "remoteEnv": {

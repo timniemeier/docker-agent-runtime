@@ -36,6 +36,7 @@ services:
       - TZ=Europe/Berlin
       - CLAUDE_CONFIG_DIR=/home/node/.claude
       - CODEX_HOME=/home/node/.codex
+      - AGENT_AUTO_LARAVEL_BOOST=${AGENT_AUTO_LARAVEL_BOOST:-1}
     networks:
       - agent-net
     command: sleep infinity

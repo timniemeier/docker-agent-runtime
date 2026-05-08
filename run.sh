@@ -228,6 +228,7 @@ fi
 ENVS+=(
     -e "TZ=Europe/Berlin"
     -e "AGENT_PROJECT_DIR=$PROJECT_DIR"
+    -e "AGENT_AUTO_LARAVEL_BOOST=${AGENT_AUTO_LARAVEL_BOOST:-1}"
 )
 
 # Inform the in-container welcome banner of the actual project shape so

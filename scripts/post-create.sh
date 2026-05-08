@@ -43,6 +43,41 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
     gh auth setup-git >/dev/null 2>&1 || true
 fi
 
+is_laravel_workspace() {
+    [[ -f /workspace/artisan ]] || return 1
+    [[ -f /workspace/composer.json ]] || return 1
+    grep -q '"laravel/framework"' /workspace/composer.json
+}
+
+install_laravel_boost() {
+    [[ "${AGENT_AUTO_LARAVEL_BOOST:-1}" == "1" ]] || return 0
+    if [[ "${AGENT_LARAVEL_DETECTED:-0}" != "1" ]] && ! is_laravel_workspace; then
+        return 0
+    fi
+
+    if ! command -v composer >/dev/null 2>&1 || ! command -v php >/dev/null 2>&1; then
+        echo "[post-create] warn: Laravel detected, but composer/php is unavailable; skipping Laravel Boost"
+        return 0
+    fi
+
+    if ! composer --working-dir=/workspace show laravel/boost >/dev/null 2>&1; then
+        echo "[post-create] Laravel detected; installing laravel/boost"
+        if ! composer --working-dir=/workspace require laravel/boost --dev --no-interaction; then
+            echo "[post-create] warn: failed to install laravel/boost; continuing without Laravel Boost"
+            return 0
+        fi
+    fi
+
+    if [[ ! -f /workspace/.mcp.json ]] || ! grep -q '"laravel-boost"' /workspace/.mcp.json; then
+        echo "[post-create] configuring Laravel Boost"
+        if ! (cd /workspace && php artisan boost:install --no-interaction); then
+            echo "[post-create] warn: failed to run php artisan boost:install"
+        fi
+    fi
+}
+
+install_laravel_boost
+
 # --resume: import Claude/Codex session transcripts the host saved before
 # this container started. Run.sh bind-mounts the host's session dirs at
 # /host-claude-projects and /host-codex-sessions read-only when --resume
@@ -195,8 +230,8 @@ if [[ "${AGENT_LARAVEL_DETECTED:-0}" == "1" ]]; then
 
   ${AR_BOLD}Laravel Boost${AR_RESET}
 
-    ${AR_CYAN}composer require laravel/boost --dev${AR_RESET}
-    ${AR_CYAN}php artisan boost:install${AR_RESET}
+    Auto-installed when missing.
+    Opt out with ${AR_CYAN}AGENT_AUTO_LARAVEL_BOOST=0${AR_RESET}.
 "
 fi
 

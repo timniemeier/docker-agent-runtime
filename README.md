@@ -1,35 +1,117 @@
 # Docker Agent Runtime
 
+[![Release](https://img.shields.io/github/v/release/timniemeier/docker-agent-runtime?sort=semver)](https://github.com/timniemeier/docker-agent-runtime/releases)
+[![Container](https://img.shields.io/badge/GHCR-agent--runtime-blue)](https://github.com/timniemeier/docker-agent-runtime/pkgs/container/agent-runtime)
+[![Docker](https://img.shields.io/badge/runtime-Docker-2496ED)](https://www.docker.com/)
+
 <p align="center">
   <img src="readme-image.png" alt="Docker Agent Runtime — contain. control. execute." width="600">
 </p>
 
-A sandboxed Docker image that runs **Claude Code** and **Codex CLI** side-by-side, tuned for Laravel / Node / Playwright stacks (auto-detects Laravel projects and brings up postgres + redis on loopback). Network egress is restricted to a curated allowlist; no host secrets are bind-mounted; named volumes keep agent logins, npm/composer caches, and Playwright browsers around between rebuilds.
+Run AI coding agents in a disposable, batteries-included development runtime instead of your host shell.
 
-## Prerequisites
+Docker Agent Runtime packages **Claude Code**, **Codex CLI**, GitHub tooling, Playwright browsers, MCP servers, Laravel-friendly services, and a guarded network policy into one repeatable container. Your project is mounted at `/workspace`; agent credentials and package caches live in Docker volumes; host cloud credentials stay off the filesystem.
 
-- Docker Desktop (macOS/Windows) or Docker Engine 24+ (Linux), **running** — not just installed. Smoke-test with `docker info`; if it hangs or errors, start Docker Desktop before continuing. Otherwise `docker build` and `docker run` will block silently waiting for an absent daemon.
-- ~8 GB free disk for the image and Playwright browsers.
-- (Optional) An `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` exported in your shell. You can skip these and use interactive `claude login` / `codex login` instead — credentials persist in named volumes.
-- (Optional, macOS) An SSH agent on the host (`ssh-add -l` should not error). Docker Desktop on macOS does not natively forward `SSH_AUTH_SOCK` from the host, so `run.sh` mounts it explicitly. If git-over-ssh fails inside the container, see *Known limitations* below.
+Use it when you want the speed of local agents with cleaner boundaries: predictable tools, constrained egress, per-project containers, resumable sessions, and no mystery setup every time you spin up a branch.
 
-## Quick start
+## Highlights
 
-There are three supported entry points. Pick whichever matches your workflow.
+| What you get | Why it matters |
+| --- | --- |
+| Claude Code + Codex CLI together | Switch models and workflows without maintaining two local toolchains. |
+| Curated egress allowlist | Agents can reach the services they need; random outbound traffic is blocked by default. |
+| Laravel / Node / Playwright ready | PHP, Composer, Node, npm, Playwright browsers, postgres, and redis are already wired. |
+| Worktree-first workflow | Create issue branches under `./.worktrees`, mount them automatically, link `.env`, and clean them up on exit. |
+| Persistent agent state | Logins, shell history, package caches, Playwright browsers, and optional session exports survive rebuilds. |
+| MCPs preloaded | Playwright, Context7, Chrome DevTools, and GitHub MCP are configured out of the box. |
+| Clear runtime markers | Prompt segment, window title, iTerm badge, and git context line make it obvious when you are inside the container. |
 
-### 1. VSCode / Cursor devcontainer
+## Quick Start
 
 ```bash
-# Open the project in VSCode / Cursor, then:
-#   Cmd-Shift-P → "Dev Containers: Reopen in Container"
+git clone https://github.com/timniemeier/docker-agent-runtime.git
+cd docker-agent-runtime
+./run.sh /path/to/your/project
 ```
 
-The devcontainer picks up `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` from your local shell environment via `${localEnv:...}` substitution. It also bind-mounts `~/.gitconfig` read-only so commits keep your name/email.
+On first launch, `run.sh` tries to pull `ghcr.io/timniemeier/agent-runtime:latest` and falls back to a local build if no compatible image is available. You land in `zsh` with `/workspace` mounted to your project.
 
-### 2. Docker Compose
+Inside the container:
 
 ```bash
-cd docker-agent-runtime
+claude login          # or forward ANTHROPIC_API_KEY from your host shell
+codex login           # or forward OPENAI_API_KEY from your host shell
+gh auth login         # enables GitHub CLI + GitHub MCP
+ai help               # see the agent launcher commands
+```
+
+For the shortest daily workflow, install the host alias once:
+
+```bash
+./scripts/install-host-alias.sh
+exec $SHELL
+
+agent ~/projects/my-app
+```
+
+## Requirements
+
+- Docker Desktop (macOS/Windows) or Docker Engine 24+ (Linux), **running**. Check with `docker info`.
+- About 8 GB free disk for the image, browser binaries, and caches.
+- Optional: `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` exported on the host, or use interactive logins inside the container.
+- Optional on macOS: an active SSH agent (`ssh-add -l`) for git-over-SSH forwarding.
+
+## Choose Your Entry Point
+
+Pick the mode that matches how you work:
+
+| Mode | Best for | Command |
+| --- | --- | --- |
+| One-shot launcher | Daily agent sessions in any repo | `./run.sh /path/to/repo` |
+| Global alias | Launching from any project directory | `agent` |
+| Devcontainer | VS Code / Cursor users | `Dev Containers: Reopen in Container` |
+| Docker Compose | Long-running local runtime | `docker compose up -d && docker compose exec agent zsh` |
+
+### One-Shot Launcher
+
+```bash
+./run.sh                                       # mount $PWD at /workspace
+./run.sh /path/to/other/repo                   # mount that repo instead
+./run.sh --no-sidecars /path/to/repo           # skip auto-started services
+./run.sh --with-postgres /path/to/repo         # force postgres on for non-Laravel
+./run.sh --with-laravel  /path/to/repo         # force postgres + redis
+./run.sh --resume /path/to/repo                # import host Claude/Codex sessions
+./run.sh --no-worktree-prompt                  # skip the issue/worktree prompt
+./run.sh --help                                # full flag list
+```
+
+### Global `agent` Alias
+
+```bash
+./scripts/install-host-alias.sh
+# pick a different name with: ALIAS_NAME=dar ./scripts/install-host-alias.sh
+exec $SHELL
+
+agent                                  # mount $PWD
+agent ~/projects/my-laravel-app        # auto-detects Laravel, starts services
+agent --no-sidecars ~/projects/foo     # all run.sh flags work
+```
+
+The installer detects your shell rc (`~/.zshrc`, `~/.bashrc`, `~/.bash_profile`) and maintains an idempotent block, so re-running it after moving this repo updates the alias in place.
+
+### VS Code / Cursor Devcontainer
+
+Open this repo in VS Code or Cursor, then run:
+
+```text
+Cmd-Shift-P -> Dev Containers: Reopen in Container
+```
+
+The devcontainer picks up `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` from your local shell environment and bind-mounts `~/.gitconfig` read-only so commits keep your name and email.
+
+### Docker Compose
+
+```bash
 docker compose up -d
 docker compose exec agent zsh
 
@@ -37,57 +119,57 @@ docker compose exec agent zsh
 docker compose --profile laravel up -d
 ```
 
-### 3. One-shot launcher
+## Worktree Mode
 
-```bash
-cd docker-agent-runtime
-./run.sh                                       # mount $PWD at /workspace
-./run.sh /path/to/other/repo                   # mount that repo instead
-./run.sh --no-sidecars /path/to/repo           # skip auto-started sidecars
-./run.sh --with-postgres /path/to/repo         # force postgres on for non-Laravel
-./run.sh --with-laravel  /path/to/repo         # force both sidecars on
-./run.sh --resume /path/to/repo                # import host Claude/Codex sessions
-./run.sh --no-worktree-prompt                  # skip the issue/worktree prompt
-./run.sh --help                                # full flag list
-```
+Run `agent` or bare `./run.sh` from inside a git repo and the launcher can create or open a worktree before the container starts:
 
-**Worktree prompt on bare invocation.** When you run `./run.sh` (or `agent`) with **no project path** from inside a git repo, the launcher first asks `Create a new worktree for an issue? [y/N]`. Pick `y` and it opens an arrow-key selector with `[create new branch]` plus all remote branches from `origin`. Selecting an existing branch checks it out into `./.worktrees/<branch>` and mounts that worktree at `/workspace`. Selecting `[create new branch]` opens an issue selector from `gh issue list`; picking an issue creates a branch like `42-fix-login-redirect`, while `[Enter custom branch name]` lets you type the branch manually. If the main worktree has a `.env`, the new worktree gets a symlink to it so hooks and tests see the same local environment. When the container shell exits, the launcher asks whether to remove that same worktree; dirty worktrees require a second confirmation before `git worktree remove --force` is used. Add `.worktrees/` to `.gitignore`. Skip the startup prompt with `--no-worktree-prompt` or `WORKTREE_PROMPT=0`. Passing an explicit project path also bypasses both the startup and cleanup prompts.
+- Choose `[create new branch]` or an existing remote branch from an arrow-key selector.
+- Create branches from GitHub issues with names like `42-fix-login-redirect`.
+- Place worktrees under `./.worktrees/<branch>` and mount the selected worktree at `/workspace`.
+- Symlink `.env` from the main worktree when present so hooks and tests do not fail from missing local config.
+- Auto-mount the parent repo so git works correctly inside the container.
+- Ask on exit whether to remove the launcher-created worktree; dirty worktrees require a second confirmation before `git worktree remove --force`.
 
-On first invocation `run.sh` tries `docker pull ghcr.io/timniemeier/agent-runtime:latest` (~30 sec on a normal connection) and falls back to a local `docker build` (~3 min on M1) only if the pull fails or `AGENT_FORCE_BUILD=1` is set. The pulled image is re-tagged as `agent-runtime:latest` so subsequent launches reuse it. Container names are a hash of the project path (so different repos don't collide), the SSH agent socket is forwarded if available, and you land in `zsh` after the firewall initialises.
+Skip the startup prompt with `--no-worktree-prompt` or `WORKTREE_PROMPT=0`. Passing an explicit project path bypasses both startup and cleanup prompts.
 
-Inside the runtime shell, each prompt prints the current git worktree and branch when your working directory is inside a repository. The same status line is installed for `bash` if you start it manually inside the container.
+## Built For Laravel And Full-Stack Apps
 
-> Published image is `linux/arm64` only for v1.0 (Apple Silicon dev). On `linux/amd64` the pull will fail and `run.sh` falls through to a local build — see `CHANGELOG.md`.
+If the project contains `artisan` and `composer.json` requires `laravel/framework`, the one-shot launcher starts postgres and redis automatically inside the agent container on loopback:
 
-#### Global `agent` alias
-
-To launch from anywhere without typing the full path, install the host-side `agent` alias once:
-
-```bash
-./scripts/install-host-alias.sh
-# pick a different name with: ALIAS_NAME=dar ./scripts/install-host-alias.sh
-exec $SHELL    # or: source ~/.zshrc
-```
-
-The installer detects your shell rc (`~/.zshrc`, `~/.bashrc`, `~/.bash_profile`), adds an idempotent block, and re-runs safely (it replaces the existing block instead of duplicating it, so moving the repo to a new path is one re-run away).
-
-After installation:
-
-```bash
-agent                                  # mount $PWD
-agent ~/projects/my-laravel-app        # auto-detects Laravel, starts sidecars
-agent --no-sidecars ~/projects/foo     # all the run.sh flags work
-```
-
-**Laravel auto-detect:** if the project directory contains an `artisan` file and a `composer.json` that requires `laravel/framework`, `run.sh` automatically starts postgres + redis (in-container, on loopback). Override with `--no-postgres`, `--no-redis`, or `--no-sidecars`.
-
-**In-container services:** postgres and redis run *inside* the agent container — bound to `127.0.0.1:5432` and `127.0.0.1:6379`. This matches typical CI configuration and avoids Docker Desktop's flaky bridge-network DNS. Standard libpq env vars (`PGHOST=127.0.0.1`, `PGUSER`, `PGPASSWORD`, …) and Laravel env vars (`DB_CONNECTION=pgsql`, `DB_HOST=127.0.0.1`, …) are pre-injected so `php artisan migrate`, `psql`, `phpunit`, and Laravel app code all work without further configuration.
-
-Postgres data persists across restarts in an `agent-pgdata-<hash>` named volume. Two roles are seeded: `postgres`/`postgres` (superuser, classic CI default) and `laravel`/`laravel` (Laravel skeleton default). To create extra databases (e.g. a project-specific test DB):
+- Postgres: `127.0.0.1:5432`
+- Redis: `127.0.0.1:6379`
+- Seeded database roles: `postgres`/`postgres` and `laravel`/`laravel`
+- Pre-injected Laravel and libpq env vars so `php artisan migrate`, `phpunit`, `psql`, and app code work without hand-wiring
+- Laravel Boost is installed and configured automatically if the project does not already have it
 
 ```bash
 psql -h 127.0.0.1 -U postgres -c 'CREATE DATABASE myapp_testing;'
 ```
+
+Override service detection with `--no-postgres`, `--no-redis`, `--no-sidecars`, `--with-postgres`, `--with-redis`, or `--with-laravel`.
+
+## Runtime Experience
+
+Every interactive shell makes the container state visible:
+
+- Red `RUNTIME` powerlevel10k prompt segment.
+- Window/tab title prefixed with `Agent Runtime`.
+- iTerm2 badge overlaid in the pane.
+- Git worktree and branch line above each prompt in zsh and bash.
+
+Use the `ai` launcher for common agent flows:
+
+```bash
+ai claude              # Claude with default permission prompts
+ai codex               # Codex with workspace-write sandbox
+ai both                # tmux split: Claude left, Codex right
+ai firewall            # re-run egress allowlist
+ai help
+```
+
+## Project Status
+
+The published v1 image is currently `linux/arm64` first, tuned for Apple Silicon development. On `linux/amd64`, `run.sh` falls back to a local Docker build. Public hardening docs live in the Security model and Accepted tradeoffs sections below; a standalone license file has not been published yet.
 
 ## Authentication
 
@@ -150,9 +232,9 @@ Edit `scripts/init-firewall.sh` and rebuild. The list is grouped by purpose (Ant
 docker run -e OPENAI_ALLOWED_DOMAINS="example.com fly.io" ... agent-runtime:latest
 ```
 
-## Bundled MCP servers
+## Bundled MCP Servers
 
-Claude is pre-wired (via the seeded `config/claude-settings.json`) with four MCP servers that work out-of-the-box across projects:
+Claude is pre-wired through `config/claude-settings.json` with core MCP servers that work across projects, plus a Laravel Boost entry that becomes active once a Laravel workspace is bootstrapped:
 
 | Server | Package | Purpose |
 | --- | --- | --- |
@@ -160,21 +242,17 @@ Claude is pre-wired (via the seeded `config/claude-settings.json`) with four MCP
 | `context7` | `@upstash/context7-mcp` | Up-to-date library docs lookup |
 | `chrome-devtools` | `chrome-devtools-mcp` | Chrome DevTools Protocol — inspect pages, traces, console |
 | `github` | `@modelcontextprotocol/server-github` (via `/usr/local/bin/mcp-github`) | GitHub repo / PR / issue tooling |
+| `laravel-boost` | `laravel/boost` | Laravel-aware app context, docs, and framework tooling |
 
 The `github` MCP gets its token automatically from the `gh` CLI — run `gh auth login` once and the wrapper script picks up the token at MCP launch. No PAT to manage.
 
 The firewall already allowlists the domains these servers reach (Context7, Chrome-for-Testing CDN, GitHub).
 
-### Project-specific: laravel-boost
+### Laravel Boost
 
-`laravel-boost` only works inside a Laravel project, so it's intentionally not bundled. Add it once per project:
+When a Laravel project is mounted, `post-create.sh` automatically runs the equivalent of `composer require laravel/boost --dev --no-interaction` when `laravel/boost` is missing, then runs `php artisan boost:install --no-interaction` if the project does not already expose a `laravel-boost` MCP entry in `.mcp.json`.
 
-```bash
-composer require laravel/boost --dev
-php artisan boost:install
-```
-
-That writes a `.mcp.json` into the project root which Claude picks up automatically.
+Set `AGENT_AUTO_LARAVEL_BOOST=0` to skip this startup bootstrap.
 
 ### Adding more
 
