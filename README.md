@@ -168,13 +168,13 @@ ai firewall            # re-run egress allowlist
 ai help
 ```
 
-Astro dev servers are published to the host on port `4321` by the one-shot launcher. Start Astro inside the container bound to all interfaces:
+Astro dev servers should keep using port `4321` inside the container. The one-shot launcher prefers `127.0.0.1:4321` on the host, but if that host port is already busy it automatically publishes the container port on the next free host port and prints the actual URL before the shell starts.
 
 ```bash
 npm run dev -- --host 0.0.0.0 --port 4321
 ```
 
-Then open `http://127.0.0.1:4321` on the host. If a project container already exists from before this port mapping was added, remove/recreate that container once so Docker can apply the new published port.
+Then open the URL printed by `run.sh`, for example `http://127.0.0.1:4321` or `http://127.0.0.1:4322`. To force a specific host port, launch with `AGENT_DEV_HOST_PORT=5173 agent ...`; to always choose a free port, use `AGENT_DEV_HOST_PORT=auto`.
 
 ## Project Status
 

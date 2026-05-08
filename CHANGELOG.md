@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent firs
 
 **Added**
 - `run.sh --rebuild` now rebuilds `agent-runtime:latest` after an interactive warning/confirmation.
-- `run.sh` now publishes Astro's default dev-server port on `127.0.0.1:4321`.
+- `run.sh` now publishes Astro's default dev-server port on `127.0.0.1:4321`, falling back to the next free host port when `4321` is already in use. `AGENT_DEV_HOST_PORT=<port>` pins the host port; `AGENT_DEV_HOST_PORT=auto` always picks a free one.
 - Extra firewall domains are now forwarded from `run.sh` via `AGENT_ALLOWED_DOMAINS` / `OPENAI_ALLOWED_DOMAINS`; Hugging Face token env vars and a persistent `agent-huggingface` cache volume are wired across launcher, Compose, and devcontainer entry points.
 - `run.sh` now imports host `~/.claude/CLAUDE.md` into the container's Claude config on startup when present.
 - Laravel projects now bootstrap Laravel Boost automatically during container startup, with `AGENT_AUTO_LARAVEL_BOOST=0` as an opt-out.

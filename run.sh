@@ -14,6 +14,9 @@
 #   WITH_POSTGRES=1         Same as --with-postgres
 #   WITH_REDIS=1            Also start a redis sidecar at redis:6379
 #   RESUME_HOST=1           Same as --resume — import host Claude/Codex sessions
+#   AGENT_DEV_HOST_PORT=... Host port for container dev servers (default: 4321,
+#                           auto-falls back when the default is busy; set to
+#                           "auto" to always choose a free port)
 set -euo pipefail
 IFS=$'\n\t'
 
@@ -49,6 +52,9 @@ Env knobs (override the flags above):
                                 or host:container[:ro] explicit)
   AGENT_ALLOWED_DOMAINS="..."   Extra firewall allowlist domains
                                 (also accepts OPENAI_ALLOWED_DOMAINS)
+  AGENT_DEV_HOST_PORT=4321      Host port for in-container dev servers.
+                                Default prefers 4321 and falls back to the
+                                next free port; set "auto" to always choose.
   AUTO_WORKTREE_MOUNT=0         Disable git-worktree parent-repo auto-mount
   RESUME_HOST=1                 Same as --resume
   WORKTREE_PROMPT=0             Same as --no-worktree-prompt
@@ -248,8 +254,79 @@ DNS_FLAGS=(--dns 1.1.1.1 --dns 8.8.8.8)
 
 LIMITS=(--memory=8g --pids-limit=4096 --cpus=4)
 
+DEV_CONTAINER_PORT=4321
+DEFAULT_DEV_HOST_PORT=4321
+
+is_tcp_port_available() {
+    local port=$1
+    local port_num
+
+    if ! [[ "$port" =~ ^[0-9]+$ ]]; then
+        return 2
+    fi
+
+    port_num=$((10#$port))
+    if (( port_num < 1 || port_num > 65535 )); then
+        return 2
+    fi
+
+    if command -v lsof >/dev/null 2>&1; then
+        ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+        return
+    fi
+
+    if command -v nc >/dev/null 2>&1; then
+        ! nc -z 127.0.0.1 "$port" >/dev/null 2>&1
+        return
+    fi
+
+    # Last resort: let Docker report any race/conflict at container start.
+    return 0
+}
+
+find_available_tcp_port() {
+    local start=$1
+    local port=$start
+
+    while (( port <= 65535 )); do
+        if is_tcp_port_available "$port"; then
+            printf '%s\n' "$port"
+            return 0
+        fi
+        port=$((port + 1))
+    done
+
+    return 1
+}
+
+if [[ "${AGENT_DEV_HOST_PORT:-}" == "auto" ]]; then
+    DEV_HOST_PORT=$(find_available_tcp_port "$DEFAULT_DEV_HOST_PORT") || {
+        echo "[run.sh] no available host port found for container port $DEV_CONTAINER_PORT" >&2
+        exit 1
+    }
+elif [[ -n "${AGENT_DEV_HOST_PORT:-}" ]]; then
+    if ! [[ "$AGENT_DEV_HOST_PORT" =~ ^[0-9]+$ ]] || \
+        (( 10#$AGENT_DEV_HOST_PORT < 1 || 10#$AGENT_DEV_HOST_PORT > 65535 )); then
+        echo "[run.sh] AGENT_DEV_HOST_PORT must be a TCP port number or 'auto'." >&2
+        exit 1
+    fi
+    if ! is_tcp_port_available "$AGENT_DEV_HOST_PORT"; then
+        echo "[run.sh] AGENT_DEV_HOST_PORT=$AGENT_DEV_HOST_PORT is already in use. Choose another port or set AGENT_DEV_HOST_PORT=auto." >&2
+        exit 1
+    fi
+    DEV_HOST_PORT=$AGENT_DEV_HOST_PORT
+elif is_tcp_port_available "$DEFAULT_DEV_HOST_PORT"; then
+    DEV_HOST_PORT=$DEFAULT_DEV_HOST_PORT
+else
+    DEV_HOST_PORT=$(find_available_tcp_port "$((DEFAULT_DEV_HOST_PORT + 1))") || {
+        echo "[run.sh] no available host port found for container port $DEV_CONTAINER_PORT" >&2
+        exit 1
+    }
+    echo "[run.sh] host port $DEFAULT_DEV_HOST_PORT is busy; using $DEV_HOST_PORT for container port $DEV_CONTAINER_PORT" >&2
+fi
+
 PORTS=(
-    -p "127.0.0.1:4321:4321"
+    -p "127.0.0.1:${DEV_HOST_PORT}:${DEV_CONTAINER_PORT}"
 )
 
 ENVS=()
@@ -278,6 +355,8 @@ ENVS+=(
     -e "TZ=Europe/Berlin"
     -e "AGENT_PROJECT_DIR=$PROJECT_DIR"
     -e "AGENT_AUTO_LARAVEL_BOOST=${AGENT_AUTO_LARAVEL_BOOST:-1}"
+    -e "AGENT_DEV_HOST_PORT=$DEV_HOST_PORT"
+    -e "AGENT_DEV_CONTAINER_PORT=$DEV_CONTAINER_PORT"
 )
 
 # Inform the in-container welcome banner of the actual project shape so
@@ -418,7 +497,14 @@ fi
 
 # Reuse the container if it already exists, otherwise launch a fresh one.
 if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
-    docker start "$CONTAINER_NAME" >/dev/null
+    if ! docker start "$CONTAINER_NAME" >/dev/null; then
+        echo "[run.sh] existing container $CONTAINER_NAME failed to start. If Docker reports a port conflict, remove that stopped container so run.sh can recreate it with a fresh port mapping: docker rm $CONTAINER_NAME" >&2
+        exit 1
+    fi
+    EXISTING_DEV_HOST_PORT=$(docker port "$CONTAINER_NAME" "${DEV_CONTAINER_PORT}/tcp" 2>/dev/null | awk -F: 'NR == 1 {print $NF}' || true)
+    if [[ -n "$EXISTING_DEV_HOST_PORT" ]]; then
+        echo "[run.sh] dev server URL: http://127.0.0.1:${EXISTING_DEV_HOST_PORT} (container port ${DEV_CONTAINER_PORT})" >&2
+    fi
     # iptables/ipset rules are wiped on container stop and don't survive a
     # restart — re-run init-firewall.sh as root before handing the user a
     # shell, otherwise the reused container has no egress allowlist at all.
@@ -433,6 +519,8 @@ if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
     fi
     exit "$_agent_shell_status"
 fi
+
+echo "[run.sh] dev server URL: http://127.0.0.1:${DEV_HOST_PORT} (container port ${DEV_CONTAINER_PORT})" >&2
 
 if docker run -it --rm \
     --name "$CONTAINER_NAME" \
