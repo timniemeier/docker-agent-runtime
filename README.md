@@ -167,6 +167,14 @@ ai firewall            # re-run egress allowlist
 ai help
 ```
 
+Astro dev servers are published to the host on port `4321` by the one-shot launcher. Start Astro inside the container bound to all interfaces:
+
+```bash
+npm run dev -- --host 0.0.0.0 --port 4321
+```
+
+Then open `http://127.0.0.1:4321` on the host. If a project container already exists from before this port mapping was added, remove/recreate that container once so Docker can apply the new published port.
+
 ## Project Status
 
 The published v1 image is currently `linux/arm64` first, tuned for Apple Silicon development. On `linux/amd64`, `run.sh` falls back to a local Docker build. Public hardening docs live in the Security model and Accepted tradeoffs sections below; a standalone license file has not been published yet.

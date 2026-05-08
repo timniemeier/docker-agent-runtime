@@ -220,6 +220,10 @@ DNS_FLAGS=(--dns 1.1.1.1 --dns 8.8.8.8)
 
 LIMITS=(--memory=8g --pids-limit=4096 --cpus=4)
 
+PORTS=(
+    -p "127.0.0.1:4321:4321"
+)
+
 ENVS=()
 if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
     ENVS+=(-e "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
@@ -409,6 +413,7 @@ if docker run -it --rm \
     "${CAPS[@]}" \
     "${DNS_FLAGS[@]}" \
     "${LIMITS[@]}" \
+    "${PORTS[@]}" \
     "${ENVS[@]}" \
     "${SSH_MOUNT[@]}" \
     "${VOLS[@]}" \
