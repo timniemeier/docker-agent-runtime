@@ -501,10 +501,12 @@ if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
         echo "[run.sh] existing container $CONTAINER_NAME failed to start. If Docker reports a port conflict, remove that stopped container so run.sh can recreate it with a fresh port mapping: docker rm $CONTAINER_NAME" >&2
         exit 1
     fi
-    EXISTING_DEV_HOST_PORT=$(docker port "$CONTAINER_NAME" "${DEV_CONTAINER_PORT}/tcp" 2>/dev/null | awk -F: 'NR == 1 {print $NF}' || true)
-    if [[ -n "$EXISTING_DEV_HOST_PORT" ]]; then
-        echo "[run.sh] dev server URL: http://127.0.0.1:${EXISTING_DEV_HOST_PORT} (container port ${DEV_CONTAINER_PORT})" >&2
-    fi
+    docker port "$CONTAINER_NAME" "${DEV_CONTAINER_PORT}/tcp" 2>/dev/null | {
+        IFS=: read -r _dev_host_bind _dev_host_port || true
+        if [[ -n "${_dev_host_port:-}" ]]; then
+            echo "[run.sh] dev server URL: http://127.0.0.1:${_dev_host_port} (container port ${DEV_CONTAINER_PORT})" >&2
+        fi
+    }
     # iptables/ipset rules are wiped on container stop and don't survive a
     # restart — re-run init-firewall.sh as root before handing the user a
     # shell, otherwise the reused container has no egress allowlist at all.
