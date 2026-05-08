@@ -254,6 +254,22 @@ _pick_new_branch_name() {
     printf -v "$result_var" '%s' "$chosen_branch"
 }
 
+_link_main_env_file() {
+    local repo_root="$1" wt_dir="$2"
+
+    if [[ -e "$wt_dir/.env" ]]; then
+        return 0
+    fi
+
+    if [[ -f "$repo_root/.env" || -L "$repo_root/.env" ]]; then
+        ln -s "$repo_root/.env" "$wt_dir/.env"
+        echo "  linked .env from main worktree" >&2
+        return 0
+    fi
+
+    echo "  warn: .env missing in main worktree; tests or pre-push hooks may fail until you create $wt_dir/.env" >&2
+}
+
 # Prompt after the launched container exits and optionally remove the worktree
 # created/selected by maybe_prompt_worktree during this same run.sh session.
 maybe_prompt_remove_launched_worktree() {
@@ -363,6 +379,7 @@ maybe_prompt_worktree() {
         fi
         git -C "$repo_root" worktree add --track -b "$branch" "$wt_dir" "origin/$branch" || return 1
     fi
+    _link_main_env_file "$repo_root" "$wt_dir"
 
     # Suggest .gitignore hygiene without auto-editing the user's repo.
     if [[ -f "$repo_root/.gitignore" ]] \
