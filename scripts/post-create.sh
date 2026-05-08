@@ -22,10 +22,6 @@ if [[ ! -f "$CODEX_DIR/config.toml" ]] && [[ -f /etc/agent-runtime/codex-config.
     cp /etc/agent-runtime/codex-config.toml "$CODEX_DIR/config.toml"
 fi
 
-if [[ -f /host-claude-md/CLAUDE.md ]]; then
-    cp /host-claude-md/CLAUDE.md "$CLAUDE_DIR/CLAUDE.md"
-fi
-
 # Writable runtime gitconfig (GIT_CONFIG_GLOBAL). It pulls in the user's
 # host-side ~/.gitconfig (which we bind-mount read-only at /home/node/
 # .gitconfig) so name/email/aliases still apply, but tools like

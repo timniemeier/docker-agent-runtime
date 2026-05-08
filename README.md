@@ -192,7 +192,7 @@ gh auth login         # GitHub CLI (lives in /home/node/.config/gh volume)
 
 You can also export `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` on the host; both are forwarded into the container and override interactive login.
 
-If `~/.claude/CLAUDE.md` exists on the host, `run.sh` mounts it read-only and `post-create.sh` copies it into the container's `~/.claude/CLAUDE.md` on startup. Edit the host file and start a fresh runtime shell to refresh the container copy.
+If `~/.claude/CLAUDE.md` exists on the host, `run.sh` bind-mounts it read-only directly at the container's `~/.claude/CLAUDE.md`, so the host file stays canonical. Edits show up the next time the container starts — Claude Code re-reads the file each invocation, so a fresh `claude` launch is enough; no rebuild or volume reset needed. The named `agent-claude` volume still holds sessions, credentials, and history; only `CLAUDE.md` is shadowed by the bind.
 
 ## The `ai` launcher
 

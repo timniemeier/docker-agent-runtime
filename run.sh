@@ -430,8 +430,12 @@ if [[ -f "$HOME/.gitconfig" ]]; then
     VOLS+=(-v "$HOME/.gitconfig:/home/node/.gitconfig:ro")
 fi
 
+# Host-canonical Claude rules. Bind-mounted read-only directly over the
+# named-volume path so host edits propagate immediately on next launch and
+# nothing inside the container can drift the file out of sync. Shadows the
+# agent-claude volume's CLAUDE.md (if any) — that's intentional.
 if [[ -f "$HOME/.claude/CLAUDE.md" ]]; then
-    VOLS+=(-v "$HOME/.claude/CLAUDE.md:/host-claude-md/CLAUDE.md:ro")
+    VOLS+=(-v "$HOME/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro")
 fi
 
 # Resolve EXPORT_HOST=auto → on when --resume is on, off otherwise.

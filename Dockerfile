@@ -152,7 +152,6 @@ RUN mkdir -p \
         /home/${USERNAME}/.cache/huggingface \
         /home/${USERNAME}/.local/bin \
         /commandhistory \
-        /host-claude-md \
         /etc/agent-runtime \
     && touch /commandhistory/.bash_history /commandhistory/.zsh_history \
     && chown -R ${USERNAME}:${USERNAME} \
