@@ -5,6 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent firs
 ## [Unreleased]
 
 **Added**
+- Runtime shell prompt context line showing the current git worktree and branch in both zsh and bash.
 - Exit cleanup prompt for worktrees launched via the bare `./run.sh` / `agent` worktree prompt. When the container shell exits, the host asks whether to run `git worktree remove`; dirty worktrees print `git status --short` and require a second confirmation before `--force` is used.
 - Host-side worktree prompt on bare `./run.sh` / `agent` invocations. From inside a git repo with an interactive TTY, the launcher asks `Create a new worktree for an issue?`; on opt-in it opens an arrow-key selector with `[create new branch]` and all remote branches from `origin`. Existing remote branches are checked out into `./.worktrees/<branch>`; new branches are created from either a selected open GitHub issue (`<num>-<slug>`) or a manually entered branch name. Skipped on non-TTY, when an explicit project path is passed, or under `--no-worktree-prompt` / `WORKTREE_PROMPT=0`. New module: `scripts/host-worktree-prompt.sh`. (#11)
 

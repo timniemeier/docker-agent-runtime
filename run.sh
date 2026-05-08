@@ -225,7 +225,10 @@ fi
 if [[ -n "${OPENAI_API_KEY:-}" ]]; then
     ENVS+=(-e "OPENAI_API_KEY=$OPENAI_API_KEY")
 fi
-ENVS+=(-e "TZ=Europe/Berlin")
+ENVS+=(
+    -e "TZ=Europe/Berlin"
+    -e "AGENT_PROJECT_DIR=$PROJECT_DIR"
+)
 
 # Inform the in-container welcome banner of the actual project shape so
 # it doesn't lie about Laravel detection or which services are running.

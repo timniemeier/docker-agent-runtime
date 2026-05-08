@@ -173,6 +173,7 @@ RUN echo "${USERNAME} ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" \
 COPY scripts/agent-output.sh    /usr/local/lib/agent-output.sh
 COPY scripts/agent-prompt.zsh   /usr/local/lib/agent-prompt.zsh
 COPY scripts/agent-export.sh    /usr/local/lib/agent-export.sh
+COPY scripts/agent-worktree-status.sh /usr/local/lib/agent-worktree-status.sh
 COPY scripts/init-firewall.sh   /usr/local/bin/init-firewall.sh
 COPY scripts/post-create.sh     /usr/local/bin/post-create.sh
 COPY scripts/post-start.sh      /usr/local/bin/post-start.sh
@@ -262,7 +263,8 @@ RUN { \
         echo 'export HISTFILE=/commandhistory/.bash_history'; \
         echo 'export HISTSIZE=10000'; \
         echo 'export HISTFILESIZE=20000'; \
-        echo 'export PROMPT_COMMAND="history -a; ${PROMPT_COMMAND:-}"'; \
+        echo '[[ -f /usr/local/lib/agent-worktree-status.sh ]] && source /usr/local/lib/agent-worktree-status.sh'; \
+        echo 'export PROMPT_COMMAND="history -a; type agent_print_worktree_status >/dev/null 2>&1 && agent_print_worktree_status; ${PROMPT_COMMAND:-}"'; \
     } >> /home/${USERNAME}/.bashrc
 
 WORKDIR /workspace

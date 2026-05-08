@@ -55,6 +55,8 @@ cd docker-agent-runtime
 
 On first invocation `run.sh` tries `docker pull ghcr.io/timniemeier/agent-runtime:latest` (~30 sec on a normal connection) and falls back to a local `docker build` (~3 min on M1) only if the pull fails or `AGENT_FORCE_BUILD=1` is set. The pulled image is re-tagged as `agent-runtime:latest` so subsequent launches reuse it. Container names are a hash of the project path (so different repos don't collide), the SSH agent socket is forwarded if available, and you land in `zsh` after the firewall initialises.
 
+Inside the runtime shell, each prompt prints the current git worktree and branch when your working directory is inside a repository. The same status line is installed for `bash` if you start it manually inside the container.
+
 > Published image is `linux/arm64` only for v1.0 (Apple Silicon dev). On `linux/amd64` the pull will fail and `run.sh` falls through to a local build — see `CHANGELOG.md`.
 
 #### Global `agent` alias

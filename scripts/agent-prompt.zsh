@@ -8,7 +8,8 @@
 #      prompt. Always visible at the start of each command line.
 #   2. Window / tab title: "🐳 Agent Runtime — <cwd>". iTerm2,
 #      Terminal.app, VS Code, Warp all surface this.
-#   3. iTerm2 badge: large faint "AGENT RUNTIME" text overlaid in the
+#   3. Worktree line: current git worktree + branch above each prompt.
+#   4. iTerm2 badge: large faint "AGENT RUNTIME" text overlaid in the
 #      corner of the pane. iTerm-only; harmless in other terminals.
 
 # 1. Custom p10k segment — only defined when p10k is loaded.
@@ -28,7 +29,12 @@ function _runtime_set_title() {
     print -Pn "\e]0;🐳 Agent Runtime — %~\a"
 }
 
-# 3. iTerm2 badge. Skipped silently if not iTerm2 (other terminals just
+# 3. Current git worktree + branch, refreshed before each prompt.
+if [[ -f /usr/local/lib/agent-worktree-status.sh ]]; then
+    source /usr/local/lib/agent-worktree-status.sh
+fi
+
+# 4. iTerm2 badge. Skipped silently if not iTerm2 (other terminals just
 #    treat the OSC 1337 sequence as no-op).
 function _runtime_set_badge() {
     local badge_b64
@@ -37,11 +43,14 @@ function _runtime_set_badge() {
 }
 
 # Hook into precmd. Idempotent: precmd_functions is a uniqued array.
-typeset -ga precmd_functions
+typeset -gaU precmd_functions
+if (( ${+functions[agent_print_worktree_status]} )); then
+    precmd_functions+=(agent_print_worktree_status)
+fi
 precmd_functions+=(_runtime_set_title)
 precmd_functions+=(_runtime_set_badge)
 
-# 4. Session export. When run.sh launched with --resume / --export, the
+# 5. Session export. When run.sh launched with --resume / --export, the
 #    host's session-export dir is bind-mounted at /host-claude-export.
 #    Mirror the container's writable session dir back there on every
 #    prompt (throttled, see agent-export.sh) so a container destroy or
