@@ -82,6 +82,7 @@ Pick the mode that matches how you work:
 ./run.sh --with-laravel  /path/to/repo         # force postgres + redis
 ./run.sh --resume /path/to/repo                # import host Claude/Codex sessions
 ./run.sh --no-worktree-prompt                  # skip the issue/worktree prompt
+./run.sh --rebuild /path/to/repo               # rebuild the local runtime image
 ./run.sh --help                                # full flag list
 ```
 
@@ -300,14 +301,11 @@ Adds a Postgres 16 container (user/db `laravel`, password `laravel`) and a Redis
 ## FAQ / Troubleshooting
 
 **Q: I edited a script but my changes aren't visible inside the container.**
-`run.sh` only builds the image when there is none — and it'll prefer pulling from GHCR over building. After changing anything in `Dockerfile`, `scripts/`, or `config/`, force a local rebuild:
+`run.sh` only builds the image when there is none — and it'll prefer pulling from GHCR over building. After changing anything in `Dockerfile`, `scripts/`, or `config/`, rebuild before launching:
 ```bash
-docker rmi agent-runtime:latest
-AGENT_FORCE_BUILD=1 ./run.sh         # or just `docker build` directly
-# or, scripted:
-docker build -t agent-runtime:latest /Users/Tim/Documents/docker-agent-runtime
+./run.sh --rebuild /path/to/project
 ```
-The `--rm` flag in `run.sh` already removes the container on exit, so the next `agent` invocation picks up the new image automatically.
+The command asks for confirmation first because it downloads current upstream packages and replaces the local `agent-runtime:latest` image tag used by future launches. Docker volumes with logins, caches, history, and project data are not removed.
 
 **Q: Powerlevel10k icons show as `[?]` in my terminal.**
 Install MesloLGS NF and select it as your terminal font. One-liner:

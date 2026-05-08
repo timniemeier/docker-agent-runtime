@@ -39,6 +39,9 @@ Options:
   --no-export           Disable the export half of --resume (import only).
   --no-worktree-prompt  Skip the "create worktree for an issue?" prompt
                         on bare invocations. Same as WORKTREE_PROMPT=0.
+  --rebuild             Rebuild agent-runtime:latest before launching.
+                        Prompts first because this downloads packages and
+                        replaces the local runtime image tag.
   -h, --help            Show this help and exit
 
 Env knobs (override the flags above):
@@ -54,6 +57,7 @@ Examples:
   agent                                  # mount $PWD
   agent ~/projects/myrepo                # mount that path
   agent --resume ~/projects/laravel      # also import host sessions
+  agent --rebuild ~/projects/myrepo      # rebuild image, then launch
   agent --no-sidecars ~/projects/foo     # bare runtime, no DB
 
 Inside the container, run `ai help` for Claude/Codex launchers.
@@ -69,6 +73,7 @@ RESUME_HOST=${RESUME_HOST:-0}
 # Export defaults to "paired" — auto-on whenever --resume is on. --no-export
 # splits the pair so you can import without writing back to the host.
 EXPORT_HOST=${EXPORT_HOST:-auto}
+REBUILD_IMAGE=0
 _args=()
 for arg in "$@"; do
     case "$arg" in
@@ -81,6 +86,7 @@ for arg in "$@"; do
         --resume)        RESUME_HOST=1 ;;
         --no-export)     EXPORT_HOST=0 ;;
         --no-worktree-prompt) WORKTREE_PROMPT=0 ;;
+        --rebuild)       REBUILD_IMAGE=1 ;;
         -h|--help)       usage; exit 0 ;;
         *) _args+=("$arg") ;;
     esac
@@ -164,7 +170,29 @@ GHCR_IMAGE="ghcr.io/timniemeier/agent-runtime:latest"
 # rebuild by deleting the local tag and re-running, or by `docker build`ing
 # directly. AGENT_FORCE_BUILD=1 skips the pull and builds locally — useful for
 # testing Dockerfile changes against an unreleased commit.
-if ! docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
+if [[ "$REBUILD_IMAGE" == "1" ]]; then
+    if [[ ! -t 0 ]]; then
+        echo "[run.sh] --rebuild requires an interactive TTY for confirmation." >&2
+        exit 1
+    fi
+    cat >&2 <<EOF
+[run.sh] Rebuild requested for $IMAGE_TAG.
+
+This will:
+  - download current upstream packages during docker build
+  - replace your local $IMAGE_TAG image tag
+  - affect future agent/compose launches that use that tag
+
+Docker volumes with logins, caches, history, and project data are not removed.
+EOF
+    read -r -p "Continue with rebuild? [y/N]: " _rebuild_ans </dev/tty || exit 1
+    _rebuild_ans=$(printf '%s' "$_rebuild_ans" | tr '[:upper:]' '[:lower:]')
+    case "$_rebuild_ans" in
+        y|yes) ;;
+        *) echo "[run.sh] rebuild cancelled" >&2; exit 1 ;;
+    esac
+    docker build -t "$IMAGE_TAG" "$SCRIPT_DIR"
+elif ! docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
     if [[ "${AGENT_FORCE_BUILD:-0}" != "1" ]] && docker pull "$GHCR_IMAGE" 2>/dev/null; then
         echo "[run.sh] pulled $GHCR_IMAGE → tagging as $IMAGE_TAG"
         docker tag "$GHCR_IMAGE" "$IMAGE_TAG"
