@@ -137,7 +137,11 @@ RUN mkdir -p ${NPM_CONFIG_PREFIX} \
         @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
         @openai/codex@${CODEX_VERSION} \
         @playwright/mcp \
-    && npm cache clean --force
+    && npm cache clean --force \
+    && test -x "${NPM_CONFIG_PREFIX}/bin/claude" \
+    && test -x "${NPM_CONFIG_PREFIX}/bin/codex" \
+    && ln -sf "${NPM_CONFIG_PREFIX}/bin/claude" /usr/local/bin/claude \
+    && ln -sf "${NPM_CONFIG_PREFIX}/bin/codex" /usr/local/bin/codex
 
 # --- User & directory layout --------------------------------------------------
 # Reuse the base image's `node` user (UID 1000). Pre-create the dirs we'll

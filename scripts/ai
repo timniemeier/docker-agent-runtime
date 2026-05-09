@@ -7,6 +7,24 @@ RED=$'\033[31m'
 BOLD=$'\033[1m'
 RESET=$'\033[0m'
 
+NPM_GLOBAL_BIN=${NPM_GLOBAL_BIN:-/usr/local/share/npm-global/bin}
+export PATH="${NPM_GLOBAL_BIN}:$HOME/.composer/vendor/bin:$HOME/.local/bin:${PATH}"
+
+resolve_tool() {
+    local tool=$1
+    if command -v "$tool" >/dev/null 2>&1; then
+        command -v "$tool"
+        return 0
+    fi
+    if [[ -x "${NPM_GLOBAL_BIN}/${tool}" ]]; then
+        printf '%s\n' "${NPM_GLOBAL_BIN}/${tool}"
+        return 0
+    fi
+    echo "Required command not found: ${tool}" >&2
+    echo "Expected it on PATH or at ${NPM_GLOBAL_BIN}/${tool}." >&2
+    exit 127
+}
+
 warn_yolo() {
     local agent=$1
     {
@@ -34,21 +52,25 @@ EOF
 }
 
 run_claude() {
+    local claude_bin
+    claude_bin=$(resolve_tool claude)
     if [[ "${1:-}" == "--yolo" ]]; then
         shift
         warn_yolo "Claude Code"
-        exec claude --dangerously-skip-permissions "$@"
+        exec "$claude_bin" --dangerously-skip-permissions "$@"
     fi
-    exec claude "$@"
+    exec "$claude_bin" "$@"
 }
 
 run_codex() {
+    local codex_bin
+    codex_bin=$(resolve_tool codex)
     if [[ "${1:-}" == "--yolo" ]]; then
         shift
         warn_yolo "Codex"
-        exec codex --enable goals --sandbox danger-full-access --ask-for-approval never "$@"
+        exec "$codex_bin" --enable goals --sandbox danger-full-access --ask-for-approval never "$@"
     fi
-    exec codex --enable goals --sandbox workspace-write --ask-for-approval on-request "$@"
+    exec "$codex_bin" --enable goals --sandbox workspace-write --ask-for-approval on-request "$@"
 }
 
 run_both() {
