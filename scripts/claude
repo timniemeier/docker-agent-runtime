@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Permissive Claude Code launcher for the agent runtime.
+set -euo pipefail
+IFS=$'\n\t'
+
+CLAUDE_BIN=${CLAUDE_BIN:-/usr/local/share/npm-global/bin/claude}
+
+case "${1:-}" in
+    login|logout|auth|doctor|update|mcp|config|--help|-h|--version|-v)
+        exec "$CLAUDE_BIN" "$@"
+        ;;
+esac
+
+exec "$CLAUDE_BIN" --dangerously-skip-permissions "$@"

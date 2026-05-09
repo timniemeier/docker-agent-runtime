@@ -139,9 +139,7 @@ RUN mkdir -p ${NPM_CONFIG_PREFIX} \
         @playwright/mcp \
     && npm cache clean --force \
     && test -x "${NPM_CONFIG_PREFIX}/bin/claude" \
-    && test -x "${NPM_CONFIG_PREFIX}/bin/codex" \
-    && ln -sf "${NPM_CONFIG_PREFIX}/bin/claude" /usr/local/bin/claude \
-    && ln -sf "${NPM_CONFIG_PREFIX}/bin/codex" /usr/local/bin/codex
+    && test -x "${NPM_CONFIG_PREFIX}/bin/codex"
 
 # --- User & directory layout --------------------------------------------------
 # Reuse the base image's `node` user (UID 1000). Pre-create the dirs we'll
@@ -184,6 +182,8 @@ COPY scripts/post-create.sh     /usr/local/bin/post-create.sh
 COPY scripts/post-start.sh      /usr/local/bin/post-start.sh
 COPY scripts/start-services.sh  /usr/local/bin/start-services.sh
 COPY scripts/ai                 /usr/local/bin/ai
+COPY scripts/claude             /usr/local/bin/claude
+COPY scripts/codex              /usr/local/bin/codex
 COPY scripts/mcp-github         /usr/local/bin/mcp-github
 COPY scripts/agent-export       /usr/local/bin/agent-export
 COPY scripts/entrypoint.sh      /usr/local/bin/entrypoint.sh
@@ -205,6 +205,8 @@ RUN chown root:root /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh
         /usr/local/bin/post-start.sh \
         /usr/local/bin/start-services.sh \
         /usr/local/bin/ai \
+        /usr/local/bin/claude \
+        /usr/local/bin/codex \
         /usr/local/bin/mcp-github \
         /usr/local/bin/agent-export \
         /usr/local/bin/entrypoint.sh

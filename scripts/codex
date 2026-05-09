@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Permissive Codex launcher for the agent runtime.
+set -euo pipefail
+IFS=$'\n\t'
+
+CODEX_BIN=${CODEX_BIN:-/usr/local/share/npm-global/bin/codex}
+
+case "${1:-}" in
+    login|logout|auth|mcp|--help|-h|--version|-V)
+        exec "$CODEX_BIN" "$@"
+        ;;
+esac
+
+exec "$CODEX_BIN" --enable goals --sandbox danger-full-access --ask-for-approval never "$@"

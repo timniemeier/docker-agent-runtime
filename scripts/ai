@@ -41,10 +41,10 @@ usage() {
 Usage: ai <command> [args...]
 
 Commands:
-  claude [args...]            Launch Claude Code with default permission prompts.
-  claude --yolo [args...]     Launch Claude with --dangerously-skip-permissions.
-  codex [args...]             Launch Codex with workspace-write sandbox, on-request approval, and Goals enabled.
-  codex --yolo [args...]      Launch Codex with danger-full-access sandbox, never approval, and Goals enabled.
+  claude [args...]            Launch Claude Code with permission prompts disabled.
+  claude --yolo [args...]     Same as `ai claude`; kept for muscle memory.
+  codex [args...]             Launch Codex with danger-full-access sandbox, never approval, and Goals enabled.
+  codex --yolo [args...]      Same as `ai codex`; kept for muscle memory.
   both [--yolo]               Open a tmux split: Claude on the left, Codex on the right.
   firewall                    Re-run the egress firewall (sudo).
   help                        Show this help.
@@ -56,10 +56,9 @@ run_claude() {
     claude_bin=$(resolve_tool claude)
     if [[ "${1:-}" == "--yolo" ]]; then
         shift
-        warn_yolo "Claude Code"
-        exec "$claude_bin" --dangerously-skip-permissions "$@"
     fi
-    exec "$claude_bin" "$@"
+    warn_yolo "Claude Code"
+    exec "$claude_bin" --dangerously-skip-permissions "$@"
 }
 
 run_codex() {
@@ -67,10 +66,8 @@ run_codex() {
     codex_bin=$(resolve_tool codex)
     if [[ "${1:-}" == "--yolo" ]]; then
         shift
-        warn_yolo "Codex"
-        exec "$codex_bin" --enable goals --sandbox danger-full-access --ask-for-approval never "$@"
     fi
-    exec "$codex_bin" --enable goals --sandbox workspace-write --ask-for-approval on-request "$@"
+    exec "$codex_bin" --enable goals --sandbox danger-full-access --ask-for-approval never "$@"
 }
 
 run_both() {

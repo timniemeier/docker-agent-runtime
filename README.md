@@ -161,8 +161,8 @@ Every interactive shell makes the container state visible:
 Use the `ai` launcher for common agent flows:
 
 ```bash
-ai claude              # Claude with default permission prompts
-ai codex               # Codex with workspace-write sandbox
+ai claude              # Claude with permission prompts disabled
+ai codex               # Codex with danger-full-access sandbox
 ai both                # tmux split: Claude left, Codex right
 ai firewall            # re-run egress allowlist
 ai help
@@ -196,19 +196,19 @@ If `~/.claude/CLAUDE.md` exists on the host, `run.sh` bind-mounts it read-only d
 
 ## The `ai` launcher
 
-Single entry point with sensible defaults, plus YOLO toggles when you want them:
+Single entry point with permissive defaults for the sandboxed runtime:
 
 ```bash
-ai claude              # claude with default permission prompts
-ai claude --yolo       # claude --dangerously-skip-permissions
-ai codex               # codex --enable goals --sandbox workspace-write --ask-for-approval on-request
-ai codex --yolo        # codex --enable goals --sandbox danger-full-access --ask-for-approval never
+ai claude              # claude --dangerously-skip-permissions
+ai claude --yolo       # same as ai claude
+ai codex               # codex --enable goals --sandbox danger-full-access --ask-for-approval never
+ai codex --yolo        # same as ai codex
 ai both                # tmux split: Claude left, Codex right
 ai firewall            # re-run egress allowlist (sudo)
 ai help
 ```
 
-YOLO modes print a red warning to stderr before launching.
+Permissive agent modes print a red warning to stderr before launching.
 
 Codex Goals are enabled by default. In an interactive Codex session, use `/goal <objective>` to keep Codex working toward a long-running objective across turns. Use `/goal pause`, `/goal resume`, or `/goal clear` to manage the lifecycle.
 

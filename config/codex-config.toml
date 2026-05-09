@@ -11,8 +11,8 @@
 #   - mcp_servers is a HashMap<String, McpServerConfig>, so each server
 #     is registered as `[mcp_servers.NAME]`, NOT `[[mcp_servers]]`.
 
-sandbox_mode = "workspace-write"
-approval_policy = "on-request"
+sandbox_mode = "danger-full-access"
+approval_policy = "never"
 
 [features]
 goals = true
