@@ -2,10 +2,10 @@
 # host-worktree-prompt.sh — host-side bootstrap prompt for run.sh.
 #
 # Sourced by run.sh when invoked with no PROJECT_PATH from inside a git
-# repo. Asks the user whether to spin up a fresh worktree, then either
-# checks out an existing remote branch or creates a branch for an issue under
-# ./.worktrees/<branch>, exporting PROJECT_DIR so the rest of run.sh
-# mounts the new worktree at /workspace.
+# repo. Asks the user whether to open an existing worktree first. If not, asks
+# whether to spin up a fresh worktree, then either checks out an existing remote
+# branch or creates a branch for an issue under ./.worktrees/<branch>, exporting
+# PROJECT_DIR so the rest of run.sh mounts the selected worktree at /workspace.
 #
 # Pure host-side. Targets bash 3.2 (macOS default) — no mapfile, no
 # associative arrays, no ${var,,}.
@@ -62,6 +62,46 @@ _remote_branches() {
     git ls-remote --heads origin 2>/dev/null \
         | sed -E 's#^[[:xdigit:]]+[[:space:]]+refs/heads/##' \
         | LC_ALL=C sort
+}
+
+_existing_worktrees() {
+    local path="" branch="" detached=0 bare=0 line
+
+    _emit_worktree() {
+        local label state
+        [[ -n "$path" ]] || return 0
+        if [[ "$bare" == "1" ]]; then
+            state="bare"
+        elif [[ "$detached" == "1" ]]; then
+            state="detached"
+        elif [[ -n "$branch" ]]; then
+            state="$branch"
+        else
+            state="unknown"
+        fi
+        label="$path ($state)"
+        printf '%s\t%s\n' "$path" "$label"
+    }
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ -z "$line" ]]; then
+            _emit_worktree
+            path=""
+            branch=""
+            detached=0
+            bare=0
+            continue
+        fi
+
+        case "$line" in
+            worktree\ *) path="${line#worktree }" ;;
+            branch\ refs/heads/*) branch="${line#branch refs/heads/}" ;;
+            branch\ *) branch="${line#branch }" ;;
+            detached) detached=1 ;;
+            bare) bare=1 ;;
+        esac
+    done < <(git worktree list --porcelain)
+    _emit_worktree
 }
 
 _open_issues() {
@@ -220,6 +260,27 @@ _pick_branch_action() {
     printf -v "$result_var" '%s' "${options[$idx]}"
 }
 
+_pick_existing_worktree() {
+    local result_var="$1"
+    local paths=()
+    local options=()
+    local path label idx
+
+    while IFS=$'\t' read -r path label; do
+        [[ -n "$path" && -n "$label" ]] || continue
+        paths+=("$path")
+        options+=("$label")
+    done < <(_existing_worktrees)
+
+    if [[ "${#options[@]}" -eq 0 ]]; then
+        echo "  no git worktrees found — continuing with current directory" >&2
+        return 1
+    fi
+
+    _select_index "Select existing worktree for the container:" idx "${options[@]}" || return 1
+    printf -v "$result_var" '%s' "${paths[$idx]}"
+}
+
 _pick_new_branch_name() {
     local result_var="$1"
     local options=("[Enter custom branch name]")
@@ -328,6 +389,19 @@ maybe_prompt_worktree() {
     repo_root=$(git rev-parse --show-toplevel)
 
     local ans
+    read -r -p "  Checkout an existing worktree for this container? [y/N]: " ans </dev/tty || return 0
+    ans=$(printf '%s' "$ans" | tr '[:upper:]' '[:lower:]')
+    case "$ans" in
+        y|yes)
+            local existing_wt_dir
+            _pick_existing_worktree existing_wt_dir || return 0
+            PROJECT_DIR="$existing_wt_dir"
+            export PROJECT_DIR
+            echo "[run.sh] using existing worktree → $existing_wt_dir" >&2
+            return 0
+            ;;
+    esac
+
     read -r -p "  Create a new worktree for an issue? [y/N]: " ans </dev/tty || return 0
     ans=$(printf '%s' "$ans" | tr '[:upper:]' '[:lower:]')
     case "$ans" in

@@ -122,14 +122,15 @@ docker compose --profile laravel up -d
 
 ## Worktree Mode
 
-Run `agent` or bare `./run.sh` from inside a git repo and the launcher can create or open a worktree before the container starts:
+Run `agent` or bare `./run.sh` from inside a git repo and the launcher can open or create a worktree before the container starts:
 
+- First ask whether to use an existing worktree, then show all `git worktree list` entries in an arrow-key selector.
 - Choose `[create new branch]` or an existing remote branch from an arrow-key selector.
 - Create branches from GitHub issues with names like `42-fix-login-redirect`.
 - Place worktrees under `./.worktrees/<branch>` and mount the selected worktree at `/workspace`.
 - Symlink `.env` from the main worktree when present so hooks and tests do not fail from missing local config.
 - Auto-mount the parent repo so git works correctly inside the container.
-- Ask on exit whether to remove the launcher-created worktree; dirty worktrees require a second confirmation before `git worktree remove --force`.
+- Ask on exit whether to remove only launcher-created worktrees; dirty worktrees require a second confirmation before `git worktree remove --force`.
 
 Skip the startup prompt with `--no-worktree-prompt` or `WORKTREE_PROMPT=0`. Passing an explicit project path bypasses both startup and cleanup prompts.
 

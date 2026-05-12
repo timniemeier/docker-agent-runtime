@@ -5,6 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent firs
 ## [Unreleased]
 
 **Added**
+- Worktree startup prompt now asks first whether to use an existing worktree and shows all `git worktree list` entries before falling back to the existing create-new-worktree flow.
 - `run.sh --rebuild` now rebuilds `agent-runtime:latest` after an interactive warning/confirmation.
 - `run.sh` now publishes Astro's default dev-server port on `127.0.0.1:4321`, falling back to the next free host port when `4321` is already in use. `AGENT_DEV_HOST_PORT=<port>` pins the host port; `AGENT_DEV_HOST_PORT=auto` always picks a free one.
 - Extra firewall domains are now forwarded from `run.sh` via `AGENT_ALLOWED_DOMAINS` / `OPENAI_ALLOWED_DOMAINS`; Hugging Face token env vars and a persistent `agent-huggingface` cache volume are wired across launcher, Compose, and devcontainer entry points.
