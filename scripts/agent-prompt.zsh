@@ -53,8 +53,9 @@ precmd_functions+=(_runtime_set_badge)
 # 5. Session export. When run.sh launched with --resume / --export, the
 #    host's session-export dir is bind-mounted at /host-claude-export.
 #    Mirror the container's writable session dir back there on every
-#    prompt (throttled, see agent-export.sh) so a container destroy or
-#    `docker volume rm agent-claude` doesn't lose in-flight conversations.
+#    prompt (throttled, see agent-export.sh) so container removal or
+#    `docker volume rm agent-claude agent-codex` doesn't lose in-flight
+#    conversations.
 if [[ -f /usr/local/lib/agent-export.sh ]]; then
     source /usr/local/lib/agent-export.sh
     precmd_functions+=(agent_export_sessions)

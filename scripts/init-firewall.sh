@@ -216,6 +216,11 @@ populate_allowlist() {
     add_domain storage.googleapis.com
     add_domain googlechromelabs.github.io
     add_domain edgedl.me.gvt1.com
+    add_domain stitch.withgoogle.com
+    add_domain www.stitch.withgoogle.com
+    add_domain stitch.googleapis.com
+    add_domain oauth2.googleapis.com
+    add_domain www.googleapis.com
 
     # Custom deploy target.
     add_domain auth.scalingo.com

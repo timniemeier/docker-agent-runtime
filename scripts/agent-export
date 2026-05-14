@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 # agent-export — manual session export shim.
 #
-# Forces an immediate sync of the container's session dir to the host
-# bind-mount, ignoring the precmd throttle. Use when about to destroy
-# the container and you want to be sure the latest turn is on the host.
+# Forces an immediate sync of the container's session dirs to the host
+# bind-mount, ignoring the precmd throttle. Use before removing the container
+# or volumes when you want to be sure the latest turn is on the host.
 #
 # Requires --resume (or --export) to have been passed at launch — the
 # bind-mount and project-path env are set there.
 
 set -euo pipefail
 
-if [[ ! -d /host-claude-export ]] || [[ -z "${RESUME_HOST_PROJECT_PATH:-}" ]]; then
+if { [[ ! -d /host-claude-export ]] || [[ -z "${RESUME_HOST_PROJECT_PATH:-}" ]]; } && [[ ! -d /host-codex-export ]]; then
     cat >&2 <<'EOF'
 agent-export: session export is not enabled for this container.
 
 Re-launch with `agent --resume <project>` (or RESUME_HOST=1) so the
-host's `~/.claude-runtime-export/projects` is mounted at
-/host-claude-export and RESUME_HOST_PROJECT_PATH is set.
+host export trees are mounted at /host-claude-export and
+/host-codex-export.
 EOF
     exit 1
 fi
@@ -24,4 +24,4 @@ fi
 # shellcheck disable=SC1091
 source /usr/local/lib/agent-export.sh
 agent_export_sessions 1   # force=1 → bypass throttle
-echo "agent-export: synced /home/node/.claude/projects/-workspace → /host-claude-export/${RESUME_HOST_PROJECT_PATH//\//-}"
+echo "agent-export: synced Claude/Codex session stores to host export mounts"

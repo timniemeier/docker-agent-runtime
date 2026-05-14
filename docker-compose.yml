@@ -37,6 +37,7 @@ services:
       - HF_TOKEN
       - HUGGINGFACE_HUB_TOKEN
       - HUGGING_FACE_HUB_TOKEN
+      - GOOGLE_CLOUD_PROJECT
       - OPENAI_ALLOWED_DOMAINS
       - AGENT_ALLOWED_DOMAINS
       - TZ=Europe/Berlin

@@ -26,6 +26,12 @@
       "args": [],
       "env": {}
     },
+    "stitch": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "stitch-mcp"],
+      "env": {}
+    },
     "laravel-boost": {
       "type": "stdio",
       "command": "/usr/bin/php",

@@ -67,12 +67,12 @@ Pick the mode that matches how you work:
 
 | Mode | Best for | Command |
 | --- | --- | --- |
-| One-shot launcher | Daily agent sessions in any repo | `./run.sh /path/to/repo` |
+| Persistent launcher | Daily agent sessions in any repo | `./run.sh /path/to/repo` |
 | Global alias | Launching from any project directory | `agent` |
 | Devcontainer | VS Code / Cursor users | `Dev Containers: Reopen in Container` |
 | Docker Compose | Long-running local runtime | `docker compose up -d && docker compose exec agent zsh` |
 
-### One-Shot Launcher
+### Persistent Launcher
 
 ```bash
 ./run.sh                                       # mount $PWD at /workspace
@@ -136,7 +136,7 @@ Skip the startup prompt with `--no-worktree-prompt` or `WORKTREE_PROMPT=0`. Pass
 
 ## Built For Laravel And Full-Stack Apps
 
-If the project contains `artisan` and `composer.json` requires `laravel/framework`, the one-shot launcher starts postgres and redis automatically inside the agent container on loopback:
+If the project contains `artisan` and `composer.json` requires `laravel/framework`, the persistent launcher starts postgres and redis automatically inside the agent container on loopback:
 
 - Postgres: `127.0.0.1:5432`
 - Redis: `127.0.0.1:6379`
@@ -169,7 +169,7 @@ ai firewall            # re-run egress allowlist
 ai help
 ```
 
-Astro dev servers should keep using port `4321` inside the container. The one-shot launcher prefers `127.0.0.1:4321` on the host, but if that host port is already busy it automatically publishes the container port on the next free host port and prints the actual URL before the shell starts.
+Astro dev servers should keep using port `4321` inside the container. The persistent launcher prefers `127.0.0.1:4321` on the host, but if that host port is already busy it automatically publishes the container port on the next free host port and prints the actual URL before the shell starts.
 
 ```bash
 npm run dev -- --host 0.0.0.0 --port 4321
@@ -192,6 +192,12 @@ gh auth login         # GitHub CLI (lives in /home/node/.config/gh volume)
 ```
 
 You can also export `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` on the host; both are forwarded into the container and override interactive login.
+
+The launcher creates a persistent per-project container and enters it with `docker exec`. Exiting the shell does not delete the runtime; the next `agent <project>` reuses the same container, volumes, port mapping, and in-container session state. Remove a project runtime explicitly with:
+
+```bash
+docker rm -f agent-<hash>
+```
 
 If `~/.claude/CLAUDE.md` exists on the host, `run.sh` bind-mounts it read-only directly at the container's `~/.claude/CLAUDE.md`, so the host file stays canonical. Edits show up the next time the container starts — Claude Code re-reads the file each invocation, so a fresh `claude` launch is enough; no rebuild or volume reset needed. The named `agent-claude` volume still holds sessions, credentials, and history; only `CLAUDE.md` is shadowed by the bind.
 
@@ -252,11 +258,11 @@ HF_TOKEN=hf_... \
 ./run.sh /path/to/repo
 ```
 
-The one-shot launcher, Compose file, and devcontainer forward `HF_TOKEN`, `HUGGINGFACE_HUB_TOKEN`, and `HUGGING_FACE_HUB_TOKEN`. Hugging Face downloads are cached in the `agent-huggingface` Docker volume at `/home/node/.cache/huggingface`.
+The persistent launcher, Compose file, and devcontainer forward `HF_TOKEN`, `HUGGINGFACE_HUB_TOKEN`, and `HUGGING_FACE_HUB_TOKEN`. Hugging Face downloads are cached in the `agent-huggingface` Docker volume at `/home/node/.cache/huggingface`.
 
 ## Bundled MCP Servers
 
-Claude is pre-wired through `config/claude-settings.json` with core MCP servers that work across projects, plus a Laravel Boost entry that becomes active once a Laravel workspace is bootstrapped:
+Claude and Codex are pre-wired with core MCP servers that work across projects, plus a Laravel Boost entry that becomes active once a Laravel workspace is bootstrapped:
 
 | Server | Package | Purpose |
 | --- | --- | --- |
@@ -264,11 +270,12 @@ Claude is pre-wired through `config/claude-settings.json` with core MCP servers 
 | `context7` | `@upstash/context7-mcp` | Up-to-date library docs lookup |
 | `chrome-devtools` | `chrome-devtools-mcp` | Chrome DevTools Protocol — inspect pages, traces, console |
 | `github` | `@modelcontextprotocol/server-github` (via `/usr/local/bin/mcp-github`) | GitHub repo / PR / issue tooling |
+| `stitch` | `stitch-mcp` | Google Stitch design/project tools |
 | `laravel-boost` | `laravel/boost` | Laravel-aware app context, docs, and framework tooling |
 
 The `github` MCP gets its token automatically from the `gh` CLI — run `gh auth login` once and the wrapper script picks up the token at MCP launch. No PAT to manage.
 
-The firewall already allowlists the domains these servers reach (Context7, Chrome-for-Testing CDN, GitHub).
+The firewall already allowlists the domains these servers reach (Context7, Chrome-for-Testing CDN, GitHub, Stitch). For Stitch, pass `GOOGLE_CLOUD_PROJECT=your-project-id` when launching the runtime and authenticate Google Cloud inside the container or provide application default credentials through your own explicit mount.
 
 ### Laravel Boost
 
@@ -379,14 +386,14 @@ Yes — launch with `--resume`:
 ```bash
 agent --resume ~/projects/my-laravel-app
 ```
-`run.sh` bind-mounts your host's `~/.claude/projects` and `~/.codex/sessions` read-only and copies the matching project's transcripts into the container's session store on first start. Then `claude --resume` (or `claude -c` for continue-most-recent) and `codex --resume` list them.
+`run.sh` bind-mounts your host's `~/.claude/projects` and `~/.codex/sessions` read-only and copies the matching transcripts into the container's session store on first start. Then `claude --resume` (or `claude -c` for continue-most-recent) and `codex --resume` list them.
 
-**Q: I rebuilt the runtime image / dropped the agent-claude volume. How do I keep my running conversation?**
-`--resume` also turns on an **export** half: the container's session writes are mirrored back to `~/.claude-runtime-export/projects/<encoded-project-path>/` on the host (a separate tree from your real `~/.claude` — your real Claude history stays read-only). A zsh `precmd` hook syncs after each command (throttled to ~30 s), and the same sync runs on shell exit. Manual flush before destroying the container:
+**Q: I rebuilt the runtime image / dropped the agent-claude or agent-codex volume. How do I keep my running conversation?**
+`--resume` also turns on an **export** half: Claude session writes are mirrored back to `~/.claude-runtime-export/projects/<encoded-project-path>/`, and Codex session writes are mirrored back to `~/.codex-runtime-export/sessions/`. These are separate trees from your real `~/.claude` and `~/.codex`; the pristine host histories stay read-only. A zsh `precmd` hook syncs after each command (throttled to ~30 s), and the same sync runs on shell exit. Manual flush before removing the container or volumes:
 ```bash
 agent-export   # inside the container, forces an immediate rsync
 ```
-On the next `agent --resume`, `post-create.sh` imports from the export tree first (most-recent appended turns), then fills in anything missing from the host's pristine tree. Net: `claude --resume` shows the conversation right where you left it, even after `docker volume rm agent-claude` and a full rebuild.
+On the next `agent --resume`, `post-create.sh` imports from the export tree first (most-recent appended turns), then fills in anything missing from the host's pristine tree. Net: `claude --resume` and `codex --resume` show the conversations where you left them, even after removing the named volumes and rebuilding.
 
 Disable the export half with `agent --resume --no-export <project>` if you only want import (host's `~/.claude-runtime-export/` stays empty, container writes don't escape).
 

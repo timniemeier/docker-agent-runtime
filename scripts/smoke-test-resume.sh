@@ -7,6 +7,9 @@
 #   2. post-create.sh logs `imported N Claude session(s)` with N > 0.
 #   3. /home/node/.claude/projects/-workspace/ contains the same UUIDs that
 #      live in the host's matching session dir.
+#   4. /host-codex-export import wiring is syntactically covered by
+#      post-create.sh; this smoke test still needs a deterministic Codex
+#      fixture before it can assert semantic resume behavior.
 #
 # The container runs entrypoint.sh (so post-create + post-start fire) and
 # then a verification script — no interactive shell, no port publishing.

@@ -22,6 +22,57 @@ if [[ ! -f "$CODEX_DIR/config.toml" ]] && [[ -f /etc/agent-runtime/codex-config.
     cp /etc/agent-runtime/codex-config.toml "$CODEX_DIR/config.toml"
 fi
 
+ensure_claude_mcp_servers() {
+    [[ -f "$CLAUDE_DIR/settings.json" ]] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    if jq -e '.mcpServers.stitch' "$CLAUDE_DIR/settings.json" >/dev/null 2>&1; then
+        return 0
+    fi
+    local tmp
+    tmp=$(mktemp)
+    if jq '.mcpServers.stitch = {
+        "type": "stdio",
+        "command": "npx",
+        "args": ["-y", "stitch-mcp"],
+        "env": {}
+    }' "$CLAUDE_DIR/settings.json" > "$tmp"; then
+        mv "$tmp" "$CLAUDE_DIR/settings.json"
+    else
+        rm -f "$tmp"
+    fi
+}
+
+ensure_codex_mcp_servers() {
+    [[ -f "$CODEX_DIR/config.toml" ]] || return 0
+    if ! grep -q '^\[mcp_servers\.context7\]' "$CODEX_DIR/config.toml"; then
+        cat >> "$CODEX_DIR/config.toml" <<'EOF'
+
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp@latest"]
+EOF
+    fi
+    if ! grep -q '^\[mcp_servers\.stitch\]' "$CODEX_DIR/config.toml"; then
+        cat >> "$CODEX_DIR/config.toml" <<'EOF'
+
+[mcp_servers.stitch]
+command = "npx"
+args = ["-y", "stitch-mcp"]
+EOF
+    fi
+    if ! grep -q '^\[mcp_servers\.laravel-boost\]' "$CODEX_DIR/config.toml"; then
+        cat >> "$CODEX_DIR/config.toml" <<'EOF'
+
+[mcp_servers.laravel-boost]
+command = "/usr/bin/php"
+args = ["/workspace/artisan", "boost:mcp"]
+EOF
+    fi
+}
+
+ensure_claude_mcp_servers
+ensure_codex_mcp_servers
+
 # Writable runtime gitconfig (GIT_CONFIG_GLOBAL). It pulls in the user's
 # host-side ~/.gitconfig (which we bind-mount read-only at /home/node/
 # .gitconfig) so name/email/aliases still apply, but tools like
@@ -116,13 +167,23 @@ if [[ "${RESUME_HOST:-0}" == "1" ]] && [[ -n "${RESUME_HOST_PROJECT_PATH:-}" ]];
         fi
     fi
 
-    # Codex stores sessions by UUID under ~/.codex/sessions, project-agnostic,
-    # so a flat merge does the right thing.
+    # Codex stores sessions under ~/.codex/sessions, project-agnostic, so a
+    # merge from the runtime export tree first and the pristine host tree
+    # second does the right thing. `cp -n` keeps the more recent export copy on
+    # UUID/path collision.
+    src_codex_export="/host-codex-export"
+    if [[ -d "$src_codex_export" ]]; then
+        mkdir -p "$CODEX_DIR/sessions"
+        cp -rn "$src_codex_export/." "$CODEX_DIR/sessions/" 2>/dev/null || true
+        count=$(find "$CODEX_DIR/sessions" -type f 2>/dev/null | wc -l | tr -d ' ')
+        echo "[post-create] imported Codex session store from export tree (${count} files total)"
+    fi
+
     if [[ -d /host-codex-sessions ]]; then
         mkdir -p "$CODEX_DIR/sessions"
         if cp -rn /host-codex-sessions/. "$CODEX_DIR/sessions/" 2>/dev/null; then
-            count=$(find "$CODEX_DIR/sessions" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')
-            echo "[post-create] imported Codex session store (${count} files total)"
+            count=$(find "$CODEX_DIR/sessions" -type f 2>/dev/null | wc -l | tr -d ' ')
+            echo "[post-create] imported Codex session store from host pristine tree (${count} files total)"
         fi
     fi
 fi

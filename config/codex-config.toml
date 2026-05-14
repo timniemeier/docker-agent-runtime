@@ -20,3 +20,15 @@ goals = true
 [mcp_servers.playwright]
 command = "npx"
 args = ["-y", "@playwright/mcp@latest"]
+
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp@latest"]
+
+[mcp_servers.stitch]
+command = "npx"
+args = ["-y", "stitch-mcp"]
+
+[mcp_servers.laravel-boost]
+command = "/usr/bin/php"
+args = ["/workspace/artisan", "boost:mcp"]

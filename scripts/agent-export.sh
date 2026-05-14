@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# agent-export.sh — push container Claude session writes back to a host
-# bind-mount so they survive container destroy / `docker volume rm`.
+# agent-export.sh — push container Claude/Codex session writes back to host
+# bind-mounts so they survive container removal / `docker volume rm`.
 #
 # Source this script (bash or zsh) to expose the agent_export_sessions()
 # function. The companion zsh hooks live in agent-prompt.zsh; the manual
@@ -8,6 +8,7 @@
 #
 # Mount layout (set up by run.sh when --resume / --export is on):
 #   /host-claude-export      → host's $HOME/.claude-runtime-export/projects (rw)
+#   /host-codex-export       → host's $HOME/.codex-runtime-export/sessions (rw)
 #   RESUME_HOST_PROJECT_PATH  set in env, used to derive the host-side dir name
 #
 # The export dir is a *separate* tree from the host's real ~/.claude — the
@@ -22,10 +23,9 @@
 # grown.
 : ${AGENT_EXPORT_THROTTLE:=30}
 
-agent_export_sessions() {
+agent_export_claude_sessions() {
     local force=${1:-0}
 
-    # Bail silently if export isn't enabled (no mount, no key set).
     [[ -d /host-claude-export ]] || return 0
     [[ -n "${RESUME_HOST_PROJECT_PATH:-}" ]] || return 0
 
@@ -55,4 +55,36 @@ agent_export_sessions() {
         # source mtime is newer; skips files already current.
         cp -ru "$src/." "$dst/" 2>/dev/null
     fi
+}
+
+agent_export_codex_sessions() {
+    local force=${1:-0}
+
+    [[ -d /host-codex-export ]] || return 0
+
+    local now last
+    now=$(date +%s)
+    last=${AGENT_LAST_CODEX_EXPORT:-0}
+    if (( force == 0 )) && (( now - last < AGENT_EXPORT_THROTTLE )); then
+        return 0
+    fi
+    AGENT_LAST_CODEX_EXPORT=$now
+
+    local src=$HOME/.codex/sessions
+    local dst=/host-codex-export
+
+    [[ -d "$src" ]] || return 0
+    mkdir -p "$dst" 2>/dev/null || return 0
+
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -a --inplace "$src/" "$dst/" 2>/dev/null
+    else
+        cp -ru "$src/." "$dst/" 2>/dev/null
+    fi
+}
+
+agent_export_sessions() {
+    local force=${1:-0}
+    agent_export_claude_sessions "$force"
+    agent_export_codex_sessions "$force"
 }

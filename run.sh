@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run.sh — start a one-shot agent runtime container against a project dir.
+# run.sh — start or enter a persistent agent runtime container for a project dir.
 #
 # Usage:
 #   ./run.sh                                    # uses $PWD as the project
@@ -36,8 +36,9 @@ Options:
   --no-sidecars         Force both off
   --resume              Import host Claude/Codex sessions for the project
                         AND mirror in-container session writes back to
-                        ~/.claude-runtime-export/projects/ on the host so
-                        conversations survive container destroy/rebuild.
+                        ~/.claude-runtime-export/projects/ and
+                        ~/.codex-runtime-export/sessions/ on the host so
+                        conversations survive container removal/rebuild.
                         Host's real ~/.claude tree stays read-only.
   --no-export           Disable the export half of --resume (import only).
   --no-worktree-prompt  Skip the "create worktree for an issue?" prompt
@@ -351,6 +352,9 @@ fi
 if [[ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]]; then
     ENVS+=(-e "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN")
 fi
+if [[ -n "${GOOGLE_CLOUD_PROJECT:-}" ]]; then
+    ENVS+=(-e "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT")
+fi
 ENVS+=(
     -e "TZ=Europe/Berlin"
     -e "AGENT_PROJECT_DIR=$PROJECT_DIR"
@@ -445,12 +449,14 @@ fi
 # post-create.sh can copy the matching project's transcripts into the
 # container's session dirs.
 #
-# Pairing: --resume also enables export-on-write (unless --no-export). The
-# export tree lives at $HOME/.claude-runtime-export/projects (a separate
-# location from the user's real ~/.claude/projects, which stays untouched).
+# Pairing: --resume also enables export-on-write (unless --no-export). Export
+# trees live at $HOME/.claude-runtime-export/projects and
+# $HOME/.codex-runtime-export/sessions, separate from the user's real host
+# history stores.
 # A zsh precmd hook + zshexit + manual `agent-export` keep it in sync, so
-# in-container conversations survive container destroy / `docker volume rm
-# agent-claude` and can be re-imported by the next --resume launch.
+# in-container conversations survive container removal / `docker volume rm
+# agent-claude` / `docker volume rm agent-codex` and can be re-imported by
+# the next --resume launch.
 if [[ "$RESUME_HOST" == "1" ]]; then
     if [[ -d "$HOME/.claude/projects" ]]; then
         VOLS+=(-v "$HOME/.claude/projects:/host-claude-projects:ro")
@@ -466,9 +472,13 @@ if [[ "$RESUME_HOST" == "1" ]]; then
 fi
 
 if [[ "$EXPORT_HOST" == "1" ]]; then
-    EXPORT_DIR="$HOME/.claude-runtime-export/projects"
-    mkdir -p "$EXPORT_DIR"
-    VOLS+=(-v "$EXPORT_DIR:/host-claude-export:rw")
+    CLAUDE_EXPORT_DIR="$HOME/.claude-runtime-export/projects"
+    CODEX_EXPORT_DIR="$HOME/.codex-runtime-export/sessions"
+    mkdir -p "$CLAUDE_EXPORT_DIR" "$CODEX_EXPORT_DIR"
+    VOLS+=(
+        -v "$CLAUDE_EXPORT_DIR:/host-claude-export:rw"
+        -v "$CODEX_EXPORT_DIR:/host-codex-export:rw"
+    )
     # RESUME_HOST_PROJECT_PATH may already be set by --resume above; export
     # needs it too (to derive the host-side dir name). Set defensively in
     # case --no-export-paired-with-resume edge cases come up later.
@@ -476,7 +486,8 @@ if [[ "$EXPORT_HOST" == "1" ]]; then
         -e "EXPORT_HOST=1"
         -e "RESUME_HOST_PROJECT_PATH=$PROJECT_DIR"
     )
-    echo "[run.sh] --export on: container session writes mirror to $EXPORT_DIR/" >&2
+    echo "[run.sh] --export on: Claude writes mirror to $CLAUDE_EXPORT_DIR/" >&2
+    echo "[run.sh] --export on: Codex writes mirror to $CODEX_EXPORT_DIR/" >&2
 fi
 
 # Optional extra bind mounts for cases like git worktrees, where the project
@@ -528,7 +539,7 @@ fi
 
 echo "[run.sh] dev server URL: http://127.0.0.1:${DEV_HOST_PORT} (container port ${DEV_CONTAINER_PORT})" >&2
 
-if docker run -it --rm \
+if docker run -d \
     --name "$CONTAINER_NAME" \
     --hostname agent-runtime \
     --init \
@@ -541,7 +552,17 @@ if docker run -it --rm \
     "${VOLS[@]}" \
     -w /workspace \
     "$IMAGE_TAG" \
-    zsh; then
+    sleep infinity >/dev/null; then
+    echo "[run.sh] started persistent container $CONTAINER_NAME" >&2
+else
+    _agent_shell_status=$?
+    if declare -F maybe_prompt_remove_launched_worktree >/dev/null; then
+        maybe_prompt_remove_launched_worktree || true
+    fi
+    exit "$_agent_shell_status"
+fi
+
+if docker exec -it "${ENVS[@]}" "$CONTAINER_NAME" zsh; then
     _agent_shell_status=0
 else
     _agent_shell_status=$?
