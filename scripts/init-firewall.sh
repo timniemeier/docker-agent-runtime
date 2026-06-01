@@ -176,6 +176,9 @@ populate_allowlist() {
     add_domain statsig.anthropic.com
     add_domain statsig.com
     add_domain sentry.io
+    # Claude Code native binary install + boot-time `claude update`.
+    add_domain claude.ai
+    add_domain downloads.claude.ai
 
     # OpenAI / Codex — auth, chat backend, API.
     add_domain api.openai.com

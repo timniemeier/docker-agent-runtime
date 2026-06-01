@@ -266,7 +266,7 @@ Claude and Codex are pre-wired with core MCP servers that work across projects, 
 
 | Server | Package | Purpose |
 | --- | --- | --- |
-| `playwright` | `@playwright/mcp` | Drive a real browser (chromium baked into the image) |
+| `playwright` | `@playwright/mcp` | Drive a real browser (Chrome + Chromium baked into the image) |
 | `context7` | `@upstash/context7-mcp` | Up-to-date library docs lookup |
 | `chrome-devtools` | `chrome-devtools-mcp` | Chrome DevTools Protocol — inspect pages, traces, console |
 | `github` | `@modelcontextprotocol/server-github` (via `/usr/local/bin/mcp-github`) | GitHub repo / PR / issue tooling |
@@ -301,7 +301,7 @@ Adds a Postgres 16 container (user/db `laravel`, password `laravel`) and a Redis
 ## Known limitations
 
 - **Architecture:** the image is built on `node:22-bookworm`, which is multi-arch. On Apple Silicon, build natively (`docker build --platform linux/arm64 ...`) for speed; some `apt` packages (notably `bubblewrap`) work fine on arm64 but Playwright chromium is faster on amd64.
-- **Playwright browsers:** ~300 MB are baked into the image during build to avoid a slow first run. They live in the `agent-playwright` named volume after first start.
+- **Playwright browsers:** Chrome is installed into `/opt/google/chrome` for `@playwright/mcp`, and Playwright-managed Chromium is baked into the image to avoid a slow first run. Chromium lives in the `agent-playwright` named volume after first start.
 - **macOS SSH agent:** Docker Desktop on macOS forwards `SSH_AUTH_SOCK` only via the `magic` socket workaround. `run.sh` will mount whatever path is in `SSH_AUTH_SOCK`; if you see `Permission denied (publickey)` for git-over-ssh, restart Docker Desktop or fall back to HTTPS + `gh auth`.
 - **Firewall + corporate proxies:** if your network requires an HTTPS proxy, you'll need to allowlist the proxy CIDR and set `HTTPS_PROXY` inside the container.
 - **`--cap-add SYS_ADMIN`:** required for bubblewrap and for the iptables/ipset rules; this image is **not** suitable for running untrusted third-party code on shared hardware.

@@ -46,6 +46,7 @@ Commands:
   codex [args...]             Launch Codex with danger-full-access sandbox, never approval, and Goals enabled.
   codex --yolo [args...]      Same as `ai codex`; kept for muscle memory.
   both [--yolo]               Open a tmux split: Claude on the left, Codex on the right.
+  update                      Update Claude Code + Codex to the latest release now.
   firewall                    Re-run the egress firewall (sudo).
   help                        Show this help.
 EOF
@@ -91,6 +92,16 @@ run_firewall() {
     exec sudo /usr/local/bin/init-firewall.sh
 }
 
+run_update() {
+    if [[ ! -x /usr/local/bin/agent-update.sh ]]; then
+        echo "agent-update.sh not found — rebuild the image." >&2
+        exit 1
+    fi
+    # Force the update even when boot-time auto-update is disabled
+    # (AGENT_AUTO_UPDATE=0) — a manual `ai update` is an explicit opt-in.
+    exec env AGENT_AUTO_UPDATE=1 /usr/local/bin/agent-update.sh
+}
+
 case "${1:-help}" in
     claude)
         shift
@@ -103,6 +114,9 @@ case "${1:-help}" in
     both)
         shift
         run_both "$@"
+        ;;
+    update)
+        run_update
         ;;
     firewall)
         run_firewall

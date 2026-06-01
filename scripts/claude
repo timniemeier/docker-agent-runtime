@@ -3,7 +3,13 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-CLAUDE_BIN=${CLAUDE_BIN:-/usr/local/share/npm-global/bin/claude}
+# Claude Code now ships as a native binary installed under the user's home by
+# its official installer (see Dockerfile). Fall back to the legacy npm path if
+# the native launcher is missing.
+CLAUDE_BIN=${CLAUDE_BIN:-$HOME/.local/bin/claude}
+if [[ ! -x "$CLAUDE_BIN" ]] && [[ -x /usr/local/share/npm-global/bin/claude ]]; then
+    CLAUDE_BIN=/usr/local/share/npm-global/bin/claude
+fi
 
 case "${1:-}" in
     login|logout|auth|doctor|update|mcp|config|--help|-h|--version|-v)

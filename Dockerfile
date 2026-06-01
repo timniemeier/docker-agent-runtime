@@ -132,13 +132,13 @@ RUN EXPECTED_SIG=$(curl -fsSL https://composer.github.io/installer.sig) \
 # writable, easy-to-mount location and doesn't fight with the base image's npm.
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
 ENV PATH=/usr/local/share/npm-global/bin:/home/${USERNAME}/.composer/vendor/bin:/home/${USERNAME}/.local/bin:${PATH}
+# Claude Code is installed separately via its native binary installer (see
+# below); only Codex and the Playwright MCP stay on npm.
 RUN mkdir -p ${NPM_CONFIG_PREFIX} \
     && npm install -g \
-        @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
         @openai/codex@${CODEX_VERSION} \
         @playwright/mcp \
     && npm cache clean --force \
-    && test -x "${NPM_CONFIG_PREFIX}/bin/claude" \
     && test -x "${NPM_CONFIG_PREFIX}/bin/codex"
 
 # --- User & directory layout --------------------------------------------------
@@ -164,7 +164,21 @@ RUN mkdir -p \
         /home/${USERNAME}/.composer \
         /home/${USERNAME}/.cache \
         /home/${USERNAME}/.local \
+        ${NPM_CONFIG_PREFIX} \
         /commandhistory
+
+# --- Claude Code (native binary) ----------------------------------------------
+# Install Claude Code from its official native installer rather than npm. The
+# installer downloads a checksum-verified binary and runs `claude install`,
+# which drops a launcher at ~/.local/bin/claude and a self-managed version
+# store under ~/.local/share/claude. We run it as ${USERNAME} so it lands in
+# that user's home (not root's) and isn't shadowed by a runtime volume — none
+# of the named volumes mount ~/.local. Boot-time `claude update` keeps it
+# current (see scripts/agent-update.sh + init-firewall.sh downloads.claude.ai).
+RUN curl -fsSL https://claude.ai/install.sh -o /tmp/claude-install.sh \
+    && su ${USERNAME} -s /bin/bash -c "bash /tmp/claude-install.sh ${CLAUDE_CODE_VERSION}" \
+    && rm -f /tmp/claude-install.sh \
+    && test -x /home/${USERNAME}/.local/bin/claude
 
 # Sudoers: only the firewall init script, nothing else. Tim's the auditor here
 # so the rule is intentionally narrow.
@@ -180,6 +194,7 @@ COPY scripts/agent-worktree-status.sh /usr/local/lib/agent-worktree-status.sh
 COPY scripts/init-firewall.sh   /usr/local/bin/init-firewall.sh
 COPY scripts/post-create.sh     /usr/local/bin/post-create.sh
 COPY scripts/post-start.sh      /usr/local/bin/post-start.sh
+COPY scripts/agent-update.sh    /usr/local/bin/agent-update.sh
 COPY scripts/start-services.sh  /usr/local/bin/start-services.sh
 COPY scripts/ai                 /usr/local/bin/ai
 COPY scripts/claude             /usr/local/bin/claude
@@ -203,6 +218,7 @@ RUN chown root:root /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh
         /usr/local/bin/init-firewall.sh \
         /usr/local/bin/post-create.sh \
         /usr/local/bin/post-start.sh \
+        /usr/local/bin/agent-update.sh \
         /usr/local/bin/start-services.sh \
         /usr/local/bin/ai \
         /usr/local/bin/claude \
@@ -211,14 +227,24 @@ RUN chown root:root /usr/local/bin/init-firewall.sh /usr/local/bin/entrypoint.sh
         /usr/local/bin/agent-export \
         /usr/local/bin/entrypoint.sh
 
-# --- Playwright browsers (chromium only) -------------------------------------
-# OS deps must be installed as root (apt). Browsers themselves install as the
-# `node` user so the cache lands at the path mounted as a named volume in
-# devcontainer.json / docker-compose.yml. `--with-deps` would try to sudo from
-# the build shell where no tty exists, so split the two steps explicitly.
+# --- Playwright browsers ------------------------------------------------------
+# OS deps and the Chrome channel must be installed as root. @playwright/mcp uses
+# the Chrome channel by default and looks for /opt/google/chrome/chrome, while
+# Playwright-managed Chromium lives in the cache path below.
+#
+# The Chromium cache install still runs as `node` so it lands at the path mounted
+# as a named volume in devcontainer.json / docker-compose.yml. `--with-deps`
+# would try to sudo from the build shell where no tty exists, so split the steps
+# explicitly.
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/${USERNAME}/.cache/ms-playwright
 RUN npx --yes playwright@latest install-deps chromium \
-    && rm -rf /var/lib/apt/lists/*
+    && npx --yes playwright@latest install chrome \
+    && test -x /opt/google/chrome/chrome \
+    && rm -rf /var/lib/apt/lists/* \
+    # `install chrome` runs as root and seeds a root-owned registry under
+    # PLAYWRIGHT_BROWSERS_PATH; hand it back to ${USERNAME} so the `USER node`
+    # `install chromium` step below can write to the same cache.
+    && chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/.cache/ms-playwright
 USER ${USERNAME}
 RUN npx --yes playwright@latest install chromium
 

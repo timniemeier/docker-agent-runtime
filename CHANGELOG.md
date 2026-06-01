@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent firs
 ## [Unreleased]
 
 **Added**
+- Claude Code is now installed from its official **native binary** installer (`https://claude.ai/install.sh`) instead of the `@anthropic-ai/claude-code` npm package. The launcher lands at `~/.local/bin/claude` (outside any named volume) and `scripts/claude` resolves it there, falling back to the legacy npm path if absent.
+- Claude Code and Codex now **self-update to the latest release on every container boot** via `scripts/agent-update.sh` (run from `post-start.sh` after the firewall is up). `claude update` pulls from `downloads.claude.ai`; Codex reinstalls `@openai/codex@latest` from npm. The step is non-fatal (offline boots keep the baked versions) and disablable with `AGENT_AUTO_UPDATE=0`. A flock on the shared `agent-claude` volume serializes concurrent updates across parallel containers. Firewall allowlist gains `claude.ai` and `downloads.claude.ai`. New `ai update` subcommand triggers the same refresh on demand (forces the update even when `AGENT_AUTO_UPDATE=0`).
 - `run.sh` now keeps per-project launcher containers persistent instead of starting them with `docker run --rm`; exiting the shell no longer destroys the runtime container or in-container process/session state.
 - Codex sessions now mirror to `~/.codex-runtime-export/sessions/` when `--resume` export is enabled, matching the existing Claude export/import flow.
 - Worktree startup prompt now asks first whether to use an existing worktree and shows all `git worktree list` entries before falling back to the existing create-new-worktree flow.
@@ -20,6 +22,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Most recent firs
 
 **Fixed**
 - `run.sh` previously collapsed an empty positional-args array to a single empty string via `set -- "${_args[@]:-}"`, so any downstream `[[ $# -eq 0 ]]` check was broken. The new worktree-prompt path branches on `${#_args[@]}` *before* the destructive collapse; the collapse itself is preserved for compatibility with the rest of the script. (#11)
+- The Docker build now installs the Playwright Chrome channel into `/opt/google/chrome`, matching `@playwright/mcp`'s default browser lookup instead of relying only on the named-volume-backed Chromium cache.
 
 ## [1.0.0] — 2026-05-07
 

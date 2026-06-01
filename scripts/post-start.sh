@@ -24,4 +24,10 @@ if command -v sudo >/dev/null 2>&1; then
         log_warn "Services failed to start (continuing)"
 fi
 
+# Refresh Claude Code + Codex to latest. Runs after the firewall so it uses
+# the egress allowlist; non-fatal (offline boots keep the baked versions).
+if [[ -x /usr/local/bin/agent-update.sh ]]; then
+    /usr/local/bin/agent-update.sh || log_warn "Agent CLI update step failed (continuing)"
+fi
+
 log_ready "Container ready. Run: ai help"
